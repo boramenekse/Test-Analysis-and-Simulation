@@ -255,6 +255,7 @@ for j in files:
 # put all files that failed in at least one thing together
 all_files_summoned = np.array(no_success_file_no + match_fail_file_no + wrong_start_file_no + fail1_fail_no + fail2_fail_no)
 unique_list = np.unique(all_files_summoned, return_counts=True)
+file_indices = unique_list[0].tolist()
 index = 0
 all_files_matched = []
 for i in unique_list[0]:
@@ -277,9 +278,15 @@ print("First method's result is not in the neighborhood of the contour with the 
 print('First method failure files: ', fail1_fail_no)
 print('Second method failure files: ', fail2_fail_no)
 
-crack_lengths_np = np.array(crack_lengths) * one_pixel_m
+crack_lengths = (np.array(crack_lengths) * one_pixel_m).tolist()
+crack_lengths_reduced = []
+files_list_reduced = []
+for i in files_list:
+    if not (i in file_indices):
+        files_list_reduced.append(i)
+        crack_lengths_reduced.append(crack_lengths[i])
 plt.figure()
-plt.plot(files_list, crack_lengths_np, marker = '.', markerfacecolor = 'red', markersize = 7)
+plt.plot(files_list_reduced, crack_lengths_reduced, marker = '.', markerfacecolor = 'red', markersize = 7)
 plt.xlabel('File No')
 plt.ylabel('Crack length [m]')
 plt.title('Crack length variation over files')
