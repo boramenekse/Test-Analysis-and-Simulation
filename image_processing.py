@@ -4,13 +4,15 @@ import os
 import matplotlib.pyplot as plt
 from natsort import natsorted
 import time
+import pathlib
 start_time = time.time()
 point_one_cm = 11 # [pixels]
 one_cm = point_one_cm * 10 # [pixels]
 one_pixel = 1 / one_cm # [cm]
 one_pixel_m = one_pixel/100 # [m] 
 
-dir_path = 'C:\\Users\\boram\\OneDrive\\2nd Year\\Test, Analysis and Simulation\\Code\\Test-Analysis-and-Simulation\\A1'  # Change the directory path
+p = pathlib.PurePath(__file__)
+dir_path = str(p.absolute())
 file_start_no = 0
 file_end_no = 153
 total_files_no = file_end_no-file_start_no+1
