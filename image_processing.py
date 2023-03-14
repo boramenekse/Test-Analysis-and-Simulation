@@ -13,7 +13,10 @@ one_pixel_m = one_pixel/100 # [m]
 
 
 p = pathlib.PurePath(__file__)
-dir_path = str(p.absolute())
+source = p.parents[1]
+images = p.joinpath(source, 'A1')
+dir_path = str(images)
+print(dir_path)
 file_start_no = 0
 file_end_no = 153
 total_files_no = file_end_no-file_start_no+1
@@ -83,7 +86,7 @@ fail2_fail_no = []
 crack_lengths = []
 def crack_length(type, file_no):
     image_name = 'a1_{}_{}.bmp'.format(type, file_no) # Access to the image
-    image = cv2.imread(dir_path+ '\\' + image_name)
+    image = cv2.imread(dir_path + '\\' + image_name)
     image = cv2.resize(image, (width, height)) # Resize it so you can display it on your pc
 
     # Grayscale
