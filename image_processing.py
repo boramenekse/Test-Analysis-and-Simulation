@@ -43,10 +43,10 @@ def renaming(start, end, types):
     total_file_no = (end+1) * 2
     for i in range(total_file_no):
         if i <= end:
-            os.rename(dir_path+'\\'+files[i], dir_path+'\\'+'a1_{0}_{1}.bmp'.format(types[0], file_numbers[i]))
+            os.rename(os.path.join(dir_path+'\\'+files[i]), os.path.join(dir_path+'\\'+'a1_{0}_{1}.bmp'.format(types[0], file_numbers[i])))
         elif i > end:
             index = i - (end + 1)
-            os.rename(dir_path+'\\'+files[i], dir_path+'\\'+'a1_{0}_{1}.bmp'.format(types[1], file_numbers[index]))
+            os.rename(os.path.join(dir_path+'\\'+files[i]), os.path.join(dir_path+'\\'+'a1_{0}_{1}.bmp'.format(types[1], file_numbers[index])))
 # renaming(0, 153, types=types)
 
 width = 1000
