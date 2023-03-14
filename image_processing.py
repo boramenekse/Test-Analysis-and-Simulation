@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 from natsort import natsorted
 import time
 start_time = time.time()
+one_cm = 11 # [pixels]
+one_pixel = 1 / one_cm # [cm]
+one_pixel_m = one_pixel/100 # [m] 
 
 dir_path = 'C:\\Users\\boram\\OneDrive\\2nd Year\\Test, Analysis and Simulation\\Code\\Test-Analysis-and-Simulation\\A1'  # Change the directory path
 file_start_no = 0
@@ -76,7 +79,7 @@ fail2_fail_no = []
 crack_lengths = []
 def crack_length(type, file_no):
     image_name = 'a1_{}_{}.bmp'.format(type, file_no) # Access to the image
-    image = cv2.imread(dir_path+ '\\'+image_name)
+    image = cv2.imread(dir_path+ '\\' + image_name)
     image = cv2.resize(image, (width, height)) # Resize it so you can display it on your pc
 
     # Grayscale
@@ -138,6 +141,7 @@ def crack_length(type, file_no):
     # -1 signifies drawing all contours
     # cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
     
+    # Method 2 for getting the horizontal position of final crack point
     index = 0
     points = []
     indices_points = []
@@ -163,7 +167,7 @@ def crack_length(type, file_no):
 
     # If first method fails to get it right, use the second method's result
     # The problem with the second method is that it might be underestimating the crack position
-    # I think first method works better, but it fails under specific conditions
+    # I think first method works better, but it fails under specific conditions such as when the structure is not straight (bended downwards)
     crack_pos = []
     if crack_pos1[0] >= int(0.9*width) and not (crack_pos2 == np.zeros(2)).any():
         crack_pos = crack_pos2
@@ -272,10 +276,11 @@ print("First method's result is not in the neighborhood of the contour with the 
 print('First method failure files: ', fail1_fail_no)
 print('Second method failure files: ', fail2_fail_no)
 
+crack_lengths_np = np.array(crack_lengths) * one_pixel_m
 plt.figure()
-plt.plot(files_list, crack_lengths, marker = '.', markerfacecolor = 'red', markersize = 7)
+plt.plot(files_list, crack_lengths_np, marker = '.', markerfacecolor = 'red', markersize = 7)
 plt.xlabel('File No')
-plt.ylabel('Crack length [%]')
+plt.ylabel('Crack length [m]')
 plt.title('Crack length variation over files')
 plt.grid()
 plt.savefig('A1\\Crack_length_in_each_file.png')
