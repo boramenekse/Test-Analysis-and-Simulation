@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-# Get the Excel file name from user input
+# Get the Excel file name from user input (without '.xls')
 file_name = input("Enter the name of the Excel file: ")
 
 # Get the sheet name from user input
