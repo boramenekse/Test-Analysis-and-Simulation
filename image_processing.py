@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 from natsort import natsorted
 import time
 start_time = time.time()
-one_cm = 11 # [pixels]
+point_one_cm = 11 # [pixels]
+one_cm = point_one_cm * 10 # [pixels]
 one_pixel = 1 / one_cm # [cm]
 one_pixel_m = one_pixel/100 # [m] 
 
@@ -167,7 +168,7 @@ def crack_length(type, file_no):
 
     # If first method fails to get it right, use the second method's result
     # The problem with the second method is that it might be underestimating the crack position
-    # I think first method works better, but it fails under specific conditions such as when the structure is not straight (bended downwards)
+    # I think first method works better, but it fails under specific conditions such as when the structure is not straight (bended downwards) -> that's why it fails in the first 20 files
     crack_pos = []
     if crack_pos1[0] >= int(0.9*width) and not (crack_pos2 == np.zeros(2)).any():
         crack_pos = crack_pos2
