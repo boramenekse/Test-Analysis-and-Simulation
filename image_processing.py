@@ -84,6 +84,7 @@ fail_count2 = [0]
 fail1_fail_no = []
 fail2_fail_no = []
 crack_lengths = []
+hor_start = []
 def crack_length(type, file_no):
     image_name = 'a1_{}_{}.bmp'.format(type, file_no) # Access to the image
     image = cv2.imread(str(images.joinpath(image_name)))
@@ -124,7 +125,11 @@ def crack_length(type, file_no):
         midpoint = find_midpoint(data, 0.1, 0.2)
     
     # Method 1 for getting the horizontal position of the final crack point
-    target_area = data[midpoint-2:midpoint+2, :]
+    # hor_midpoint = ((file_no/154)*0.5 + 0.25) * width
+    if file_no < 10:
+        target_area = data[midpoint-2:midpoint+2, 0: int(0.5*width)]
+    else:
+        target_area = data[midpoint-2:midpoint+2, 0: int(0.8*width)]
     pos = []
     for i in range(4):
         if np.size(np.where(target_area[i, :] == 255)[0]) != 0:
@@ -153,7 +158,7 @@ def crack_length(type, file_no):
     points = []
     indices_points = []
     for i in arc_cnt:
-        if (i[1] == midpoint) or (i[1] == midpoint-1) or (i[1] == midpoint-2):
+        if (i[1] == midpoint) or (i[1] == midpoint-1) or (i[1] == midpoint-2) or (i[1] == midpoint+1) or (i[1] == midpoint+2) or (i[1] == midpoint-3) or (i[1] == midpoint+3):
             points.append(i)
             indices_points.append(arc_cnt[index])
         index += 1
@@ -161,15 +166,27 @@ def crack_length(type, file_no):
     crack_pos2 = np.zeros(2)
     if points_np.shape[0] > 0:
         points_np_max_vert = points_np[:, 1].max()
-        if points_np_max_vert == midpoint-2:
+        if points_np_max_vert == midpoint:
             crack_pos2[0] = points_np[:, 0].max()
-            crack_pos2[1] = midpoint-2
+            crack_pos2[1] = midpoint
         elif points_np_max_vert == midpoint-1:
             crack_pos2[0] = points_np[:, 0].max()
             crack_pos2[1] = midpoint-1
-        elif points_np_max_vert == midpoint:
+        elif points_np_max_vert == midpoint+1:
             crack_pos2[0] = points_np[:, 0].max()
-            crack_pos2[1] = midpoint
+            crack_pos2[1] = midpoint+1
+        elif points_np_max_vert == midpoint-2:
+            crack_pos2[0] = points_np[:, 0].max()
+            crack_pos2[1] = midpoint-2
+        elif points_np_max_vert == midpoint+2:
+            crack_pos2[0] = points_np[:, 0].max()
+            crack_pos2[1] = midpoint+2
+        elif points_np_max_vert == midpoint-3:
+            crack_pos2[0] = points_np[:, 0].max()
+            crack_pos2[1] = midpoint-3
+        elif points_np_max_vert == midpoint+3:
+            crack_pos2[0] = points_np[:, 0].max()
+            crack_pos2[1] = midpoint+3
     crack_pos2 = crack_pos2.astype(int)
 
     # If first method fails to get it right, use the second method's result
@@ -230,11 +247,13 @@ def crack_length(type, file_no):
     starting_hor = hor.min()
     if (starting_hor >= int(0.07*width)) and (starting_hor < int(0.1*width)):
         start_hor_count[0] += 1
+        hor_start.append(starting_hor)
     else:
         wrong_start_file_no.append(file_no)
+        starting_hor = hor_start[-1]
 
     # Calculate the crack length as a percentage relative to the whole width of the image
-    crack_lengths.append(((crack_pos[0] - starting_hor)/width) * 100)
+    crack_lengths.append(crack_pos[0] - starting_hor)
 
     # Drawing the contour with the highest arc length, the crack position, and the starting horizontal position of the structure on the image 
     cv2.drawContours(image, cnt_arc, -1, (255, 0, 0), 3)
@@ -272,10 +291,12 @@ all_files_sorted = sorted(all_files_matched, key=lambda x: x[1], reverse=True)
 problem_level = np.sum(unique_list[1])/(5 * total)
 
 print('Problematic files from high to low: ', all_files_sorted, '[file_no, problem_count]')
-print('Confidence level: ', (success[0]/total)*100, '[%]')
+print("Confidence level: ",(1-len(file_indices)/total)*100, '[%]')
+print('Capturing level of right contour: ', (success[0]/total)*100, '[%]')
 print('Match level of both methods: ', (match_count[0]/total)*100, '[%]')
 print('Capturing level of the correct starting point: ', (start_hor_count[0]/total)*100, '[%]')
 print('Problem level: ', problem_level*100, '[%]')
+print('Problematic files percentage: ', (unique_list[0].shape[0]/total)*100, '[%]')
 print('First method failure level: ', (fail_count1[0]/total)*100, '[%]')
 print('Second method failure level: ', (fail_count2[0]/total)*100, '[%]')
 print('The starting position in the following files might be wrong: ', wrong_start_file_no)
@@ -285,14 +306,20 @@ print('First method failure files: ', fail1_fail_no)
 print('Second method failure files: ', fail2_fail_no)
 
 crack_lengths = (np.array(crack_lengths) * one_pixel_m).tolist()
+
+all_files_critical = np.array(wrong_start_file_no + fail1_fail_no)
+unique_list_critical = np.unique(all_files_critical, return_counts=True)
+file_indices_critical = unique_list_critical[0].tolist()
+
 crack_lengths_reduced = []
 files_list_reduced = []
 for i in files_list:
-    if not (i in file_indices):
+    if not (i in file_indices_critical):
         files_list_reduced.append(i)
         crack_lengths_reduced.append(crack_lengths[i])
+
 plt.figure()
-plt.plot(files_list_reduced, crack_lengths_reduced, marker = '.', markerfacecolor = 'red', markersize = 7)
+plt.plot(files_list, crack_lengths, marker = '.', markerfacecolor = 'red', markersize = 7)
 plt.xlabel('File No')
 plt.ylabel('Crack length [m]')
 plt.title('Crack length variation over files')
