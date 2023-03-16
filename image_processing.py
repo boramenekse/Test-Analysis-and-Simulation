@@ -49,8 +49,8 @@ def renaming(start, end, types):
             os.rename(os.path.join(dir_path+'\\'+files[i]), os.path.join(dir_path+'\\'+'a1_{0}_{1}.bmp'.format(types[1], file_numbers[index])))
 # renaming(0, 153, types=types)
 
-width = 1000
-height = 750
+width = 2048
+height = 2048
 def find_midpoint(x, fraction1, fraction2):
     """
     This function finds the vertical position of the midpoint of the structure, which is on the line that the crack propagates through. Therefore, it actually calculates the vertical position of the ending point of the crack. It does calculations in a region stated by the user with the help of arguments fraction1 and fraction2.
@@ -86,13 +86,17 @@ fail2_fail_no = []
 crack_lengths = []
 hor_start = []
 def crack_length(type, file_no):
+    """
+    parameters the function needs:
+    type, file_no, region_fail_file_no, region_vert1, region_vert2, midpoint_fail_file_no (caused by region filtering), target_area_fail_no, target_area_region_hor1, target_area_region2, method2_plus_minus, expansion_size (for checking the contour), acceptable_difference (for checking the method's results), starting_point_check1, starting_point_check2
+    """
     image_name = 'a1_{}_{}.bmp'.format(type, file_no) # Access to the image
     image = cv2.imread(str(images.joinpath(image_name)))
-    image = cv2.resize(image, (width, height)) # Resize it so you can display it on your pc
+    # image = cv2.resize(image, (width, height)) # Resize it so you can display it on your pc
 
     # Grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    gray = cv2.fastNlMeansDenoising(gray, None, 20, 7, 21) # removing noise
+    gray = cv2.fastNlMeansDenoising(gray, None, 22, 7, 21) # removing noise
     gray = cv2.GaussianBlur(gray, (3,3), 0) # makes the image blur
 
     # Find Canny edges
@@ -126,12 +130,14 @@ def crack_length(type, file_no):
     
     # Method 1 for getting the horizontal position of the final crack point
     # hor_midpoint = ((file_no/154)*0.5 + 0.25) * width
+    region_minus = 10
+    region_plus = 10
     if file_no < 10:
-        target_area = data[midpoint-2:midpoint+2, 0: int(0.5*width)]
+        target_area = data[midpoint-region_plus:midpoint+region_plus, 0: int(0.5*width)]
     else:
-        target_area = data[midpoint-2:midpoint+2, 0: int(0.8*width)]
+        target_area = data[midpoint-region_minus:midpoint+region_plus, 0: int(0.8*width)]
     pos = []
-    for i in range(4):
+    for i in range(0, region_minus + region_plus):
         if np.size(np.where(target_area[i, :] == 255)[0]) != 0:
             pos.append(np.where(target_area[i, :] == 255)[0].max())
     crack_hor = max(pos)
@@ -158,7 +164,7 @@ def crack_length(type, file_no):
     points = []
     indices_points = []
     for i in arc_cnt:
-        if (i[1] == midpoint) or (i[1] == midpoint-1) or (i[1] == midpoint-2) or (i[1] == midpoint+1) or (i[1] == midpoint+2) or (i[1] == midpoint-3) or (i[1] == midpoint+3):
+        if (i[1] == midpoint) or (i[1] == midpoint-1) or (i[1] == midpoint-2) or (i[1] == midpoint+1) or (i[1] == midpoint+2) or (i[1] == midpoint-3) or (i[1] == midpoint+3) or (i[1] == midpoint-4) or (i[1] == midpoint+4) or (i[1] == midpoint-5) or (i[1] == midpoint+5):
             points.append(i)
             indices_points.append(arc_cnt[index])
         index += 1
@@ -187,6 +193,18 @@ def crack_length(type, file_no):
         elif points_np_max_vert == midpoint+3:
             crack_pos2[0] = points_np[:, 0].max()
             crack_pos2[1] = midpoint+3
+        elif points_np_max_vert == midpoint-4:
+            crack_pos2[0] = points_np[:, 0].max()
+            crack_pos2[1] = midpoint-4
+        elif points_np_max_vert == midpoint+4:
+            crack_pos2[0] = points_np[:, 0].max()
+            crack_pos2[1] = midpoint+4
+        elif points_np_max_vert == midpoint-5:
+            crack_pos2[0] = points_np[:, 0].max()
+            crack_pos2[1] = midpoint-5
+        elif points_np_max_vert == midpoint+5:
+            crack_pos2[0] = points_np[:, 0].max()
+            crack_pos2[1] = midpoint+5
     crack_pos2 = crack_pos2.astype(int)
 
     # If first method fails to get it right, use the second method's result
@@ -208,7 +226,7 @@ def crack_length(type, file_no):
     # Checking if the first method's result is near to the contour with the highest arc length
     # This allows us to check if both methods give almost the same result since the second method uses the contour with the highest arc length to calculate the crack position
     # It also assess how well the code captures the right contour, whether it captures either the top or bottom side of the structure and it goes until the crack point -> usability of it
-    expansion_size = 3
+    expansion_size = 5
     dimension = 2*expansion_size +1
     check_matrix_rows = np.full(dimension, crack_hor)
     check_matrix_columns = np.full(dimension, midpoint)
@@ -236,7 +254,7 @@ def crack_length(type, file_no):
         no_success_file_no.append(file_no)
 
     # Check if both methods give almost the same point
-    if (abs(crack_pos1[0]-crack_pos2[0])<4) and (abs(crack_pos1[1]-crack_pos2[1])<4):
+    if (abs(crack_pos1[0]-crack_pos2[0])<6) and (abs(crack_pos1[1]-crack_pos2[1])<6):
         match_count[0] += 1
     else:
         match_fail_file_no.append(file_no)
@@ -307,7 +325,7 @@ print('Second method failure files: ', fail2_fail_no)
 
 crack_lengths = (np.array(crack_lengths) * one_pixel_m).tolist()
 
-all_files_critical = np.array(wrong_start_file_no + fail1_fail_no)
+all_files_critical = np.array(wrong_start_file_no + fail1_fail_no+ fail2_fail_no + no_success_file_no)
 unique_list_critical = np.unique(all_files_critical, return_counts=True)
 file_indices_critical = unique_list_critical[0].tolist()
 
