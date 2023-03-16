@@ -10,7 +10,13 @@ point_one_cm = 11 # [pixels]
 one_cm = point_one_cm * 10 # [pixels]
 one_pixel = 1 / one_cm # [cm]
 one_pixel_m = one_pixel/100 # [m] 
-
+'''
+What happens in this file rn:
+-unformize all the names
+-realize the folders
+-grayscale the images
+-
+'''
 
 p = pathlib.PurePath(__file__)
 source = p.parents[0] #
@@ -49,8 +55,8 @@ def renaming(start, end, types):
             os.rename(os.path.join(dir_path+'\\'+files[i]), os.path.join(dir_path+'\\'+'a1_{0}_{1}.bmp'.format(types[1], file_numbers[index])))
 # renaming(0, 153, types=types)
 
-width = 1000
-height = 750
+width = 2048
+height = 2048
 def find_midpoint(x, fraction1, fraction2):
     """
     This function finds the vertical position of the midpoint of the structure, which is on the line that the crack propagates through. Therefore, it actually calculates the vertical position of the ending point of the crack. It does calculations in a region stated by the user with the help of arguments fraction1 and fraction2.
@@ -85,6 +91,41 @@ fail1_fail_no = []
 fail2_fail_no = []
 crack_lengths = []
 hor_start = []
+
+def remove_regions(image_no, image=np.array([])):
+    height, width = image.shape
+    image[:width//2, :] = 0 #region1
+    x0 = np.array([0, 0])/2048*width
+    x1 = np.array([1250, 1250])/2048*width
+    y0 = np.array([1400, 1900])/2048*height
+    y1 = np.array([1400, 1650])/2048*height
+    x2 = [2048, 2048]
+    y2 = [1400, 1650]
+    progress = image_no/total_files_no
+    point0 = [round(x0[0]+(x0[1]-x0[0])*progress), round(y0[0]+(y0[1]-y0[0])*progress)]
+    point1 = [round(x1[0]+(x1[1]-x1[0])*progress), round(y1[0]+(y1[1]-y1[0])*progress)]
+    image[point1[1]:, point1[0]:] = 0 # region2
+
+    #region3
+    line = lambda x: point0[1]+ (point1[1]-point0[1])/(point1[0]-point0[0])*x
+    for x in range(point1[0]):
+        image[round(line(x)):, x] = 0
+    return image
+
+def preprocess(type, file_no):
+    image_name = 'a1_{}_{}.bmp'.format(type, file_no)  # Access to the image
+    image = cv2.imread(str(images.joinpath(image_name)))
+    image = cv2.resize(image, (width, height))  # Resize it so you can display it on your pc
+
+    # Grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray = cv2.fastNlMeansDenoising(gray, None, 20, 7, 21)  # removing noise
+    gray = cv2.GaussianBlur(gray, (3, 3), 0)  # makes the image blur
+
+    # Find Canny edges
+    edged = cv2.Canny(gray, 30, 200)  # edge detection
+    return edged
+
 def crack_length(type, file_no):
     image_name = 'a1_{}_{}.bmp'.format(type, file_no) # Access to the image
     image = cv2.imread(str(images.joinpath(image_name)))
@@ -99,6 +140,7 @@ def crack_length(type, file_no):
     edged = cv2.Canny(gray, 30, 200) # edge detection
               
     # Getting rid of useless region by making them all black
+    '''
     if file_no < 131:
         region1 = image[0:int(height*0.5), :]                   
         gray1 = cv2.cvtColor(region1, cv2.COLOR_BGR2GRAY)
@@ -117,7 +159,9 @@ def crack_length(type, file_no):
         gray2 = cv2.cvtColor(region2, cv2.COLOR_BGR2GRAY)                       
         ret, thresh2 = cv2.threshold(gray2, 64, 0, cv2.THRESH_BINARY)        
         edged[int(height*0.85):, :] = thresh2
-    
+    '''
+
+    edged = remove_regions(file_no, edged)
     data = np.asarray(edged) # get the data of processed image
     if file_no >= 108:
         midpoint = find_midpoint(data, 0.25, 0.3)
