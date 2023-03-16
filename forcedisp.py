@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
+#1+1 = 2
 
 # Get the Excel file name from user input (without '.xls')
 file_name = input("Enter the name of the Excel file: ")
