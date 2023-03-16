@@ -22,7 +22,6 @@ p = pathlib.PurePath(__file__)
 source = p.parents[0] #
 images = p.joinpath(source, 'A1')
 dir_path = str(images)
-print(dir_path)
 file_start_no = 0
 file_end_no = 153
 total_files_no = file_end_no-file_start_no+1
@@ -126,7 +125,7 @@ def preprocess(type, file_no):
     edged = cv2.Canny(gray, 30, 200)  # edge detection
     return edged
 
-def crack_length(type, file_no):
+def crack_length(type, file_no, hor_region_percent_1, hor_region_percent_2, hor_region_fail_percent_1, hor_region_fail_percent_2, hor_region_fail_file_no, region_minus, region_plus, target_area_change_file_no, expansion_size, acceptable_max_difference, starting_hor_region1, starting_hor_region2):
     """
     parameters the function needs:
     type, file_no, region_fail_file_no, region_vert1, region_vert2, midpoint_fail_file_no (caused by region filtering), target_area_fail_no, target_area_region_hor1, target_area_region2, method2_plus_minus, expansion_size (for checking the contour), acceptable_difference (for checking the method's results), starting_point_check1, starting_point_check2
@@ -167,21 +166,19 @@ def crack_length(type, file_no):
 
     edged = remove_regions(file_no, edged)
     data = np.asarray(edged) # get the data of processed image
-    if file_no >= 108:
-        midpoint = find_midpoint(data, 0.25, 0.3)
+    if file_no >= hor_region_fail_file_no:
+        midpoint = find_midpoint(data, hor_region_fail_percent_1, hor_region_fail_percent_2)
     else:
-        midpoint = find_midpoint(data, 0.1, 0.2)
+        midpoint = find_midpoint(data, hor_region_percent_1, hor_region_percent_2)
     
     # Method 1 for getting the horizontal position of the final crack point
     # hor_midpoint = ((file_no/154)*0.5 + 0.25) * width
-    region_minus = 10
-    region_plus = 10
-    if file_no < 10:
-        target_area = data[midpoint-region_plus:midpoint+region_plus, 0: int(0.5*width)]
+    if file_no < target_area_change_file_no:
+        target_area = data[midpoint-region_minus:midpoint+region_plus, 0: int(0.5*width)]
     else:
         target_area = data[midpoint-region_minus:midpoint+region_plus, 0: int(0.8*width)]
     pos = []
-    for i in range(0, region_minus + region_plus):
+    for i in range(0, region_minus+region_plus):
         if np.size(np.where(target_area[i, :] == 255)[0]) != 0:
             pos.append(np.where(target_area[i, :] == 255)[0].max())
     crack_hor = max(pos)
@@ -270,7 +267,6 @@ def crack_length(type, file_no):
     # Checking if the first method's result is near to the contour with the highest arc length
     # This allows us to check if both methods give almost the same result since the second method uses the contour with the highest arc length to calculate the crack position
     # It also assess how well the code captures the right contour, whether it captures either the top or bottom side of the structure and it goes until the crack point -> usability of it
-    expansion_size = 5
     dimension = 2*expansion_size +1
     check_matrix_rows = np.full(dimension, crack_hor)
     check_matrix_columns = np.full(dimension, midpoint)
@@ -298,7 +294,7 @@ def crack_length(type, file_no):
         no_success_file_no.append(file_no)
 
     # Check if both methods give almost the same point
-    if (abs(crack_pos1[0]-crack_pos2[0])<6) and (abs(crack_pos1[1]-crack_pos2[1])<6):
+    if (abs(crack_pos1[0]-crack_pos2[0])<acceptable_max_difference+1) and (abs(crack_pos1[1]-crack_pos2[1])<acceptable_max_difference+1):
         match_count[0] += 1
     else:
         match_fail_file_no.append(file_no)
@@ -307,7 +303,7 @@ def crack_length(type, file_no):
     # This is crucial for calculating the crack length correct
     # If it does that, it is likely to capture the crack point as well
     starting_hor = hor.min()
-    if (starting_hor >= int(0.07*width)) and (starting_hor < int(0.1*width)):
+    if (starting_hor >= int(starting_hor_region1*width)) and (starting_hor < int(starting_hor_region2*width)):
         start_hor_count[0] += 1
         hor_start.append(starting_hor)
     else:
@@ -331,11 +327,24 @@ def crack_length(type, file_no):
     cv2.imwrite(os.path.join(dir_path+'\\contours', image_name_edged), edged)
     print('Finished file number: {}'.format(file_no))
 
+hor_region_percent_1 = 0.1
+hor_region_percent_2 = 0.2
+hor_region_fail_percent_1 = 0.25
+hor_region_fail_percent_2 = 0.3
+hor_region_fail_file_no = 108
+region_minus = 10
+region_plus = 10
+target_area_change_file_no = 10
+expansion_size = 5
+acceptable_max_difference = 5
+starting_hor_region1 = 0.07
+starting_hor_region2 = 0.1
+
 # I put these two this way in case if you want to run the program for a part of the files 
 total = 0
 files_list = []
 for j in files:
-    crack_length(0, j)
+    crack_length(0, j, hor_region_percent_1, hor_region_percent_2, hor_region_fail_percent_1, hor_region_fail_percent_2, hor_region_fail_file_no, region_minus, region_plus, target_area_change_file_no, expansion_size, acceptable_max_difference, starting_hor_region1, starting_hor_region2)
     total += 1
     files_list.append(j)
 
@@ -375,7 +384,8 @@ file_indices_critical = unique_list_critical[0].tolist()
 
 crack_lengths_reduced = []
 files_list_reduced = []
-for i in files_list:
+files_list_len = len(files_list)
+for i in range(files_list_len):
     if not (i in file_indices_critical):
         files_list_reduced.append(i)
         crack_lengths_reduced.append(crack_lengths[i])
