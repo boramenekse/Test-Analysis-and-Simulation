@@ -54,9 +54,7 @@ def renaming(start, end, types):
             os.rename(os.path.join(dir_path+'\\'+files[i]), os.path.join(dir_path+'\\'+'a1_{0}_{1}.bmp'.format(types[1], file_numbers[index])))
 # renaming(0, 153, types=types)
 
-width = 2048
-height = 2048
-def find_midpoint(x, fraction1, fraction2):
+def find_midpoint(x, width, fraction1, fraction2):
     """
     This function finds the vertical position of the midpoint of the structure, which is on the line that the crack propagates through. Therefore, it actually calculates the vertical position of the ending point of the crack. It does calculations in a region stated by the user with the help of arguments fraction1 and fraction2.
     x: (array) the data of the image that the edge detection is used on, should only consist of 0 and 255.
@@ -111,7 +109,7 @@ def remove_regions(image_no, image=np.array([])):
         image[round(line(x)):, x] = 0
     return image
 
-def preprocess(type, file_no):
+def preprocess(type, file_no, width, height):
     image_name = 'a1_{}_{}.bmp'.format(type, file_no)  # Access to the image
     image = cv2.imread(str(images.joinpath(image_name)))
     image = cv2.resize(image, (width, height))  # Resize it so you can display it on your pc
@@ -125,14 +123,14 @@ def preprocess(type, file_no):
     edged = cv2.Canny(gray, 30, 200)  # edge detection
     return edged
 
-def crack_length(type, file_no, hor_region_percent_1, hor_region_percent_2, hor_region_fail_percent_1, hor_region_fail_percent_2, hor_region_fail_file_no, region_minus, region_plus, target_area_change_file_no, expansion_size, acceptable_max_difference, starting_hor_region1, starting_hor_region2):
+def crack_length(type, file_no, width, height, hor_region_percent_1, hor_region_percent_2, hor_region_fail_percent_1, hor_region_fail_percent_2, hor_region_fail_file_no, region_minus, region_plus, target_area_change_file_no, expansion_size, acceptable_max_difference, starting_hor_region1, starting_hor_region2):
     """
     parameters the function needs:
     type, file_no, region_fail_file_no, region_vert1, region_vert2, midpoint_fail_file_no (caused by region filtering), target_area_fail_no, target_area_region_hor1, target_area_region2, method2_plus_minus, expansion_size (for checking the contour), acceptable_difference (for checking the method's results), starting_point_check1, starting_point_check2
     """
     image_name = 'a1_{}_{}.bmp'.format(type, file_no) # Access to the image
     image = cv2.imread(str(images.joinpath(image_name)))
-    # image = cv2.resize(image, (width, height)) # Resize it so you can display it on your pc
+    image = cv2.resize(image, (width, height)) # Resize it so you can display it on your pc
 
     # Grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -143,33 +141,13 @@ def crack_length(type, file_no, hor_region_percent_1, hor_region_percent_2, hor_
     edged = cv2.Canny(gray, 30, 200) # edge detection
               
     # Getting rid of useless region by making them all black
-    '''
-    if file_no < 131:
-        region1 = image[0:int(height*0.5), :]                   
-        gray1 = cv2.cvtColor(region1, cv2.COLOR_BGR2GRAY)
-        ret, thresh1 = cv2.threshold(gray1, 64, 0, cv2.THRESH_BINARY)        
-        edged[0:int(height*0.5), :] = thresh1               
-        region2 = image[int(height*0.8):, :]                    
-        gray2 = cv2.cvtColor(region2, cv2.COLOR_BGR2GRAY)                      
-        ret, thresh2 = cv2.threshold(gray2, 64, 0, cv2.THRESH_BINARY)        
-        edged[int(height*0.8):, :] = thresh2
-    else:
-        region1 = image[0:int(height*0.5), :]                    
-        gray1 = cv2.cvtColor(region1, cv2.COLOR_BGR2GRAY)   
-        ret, thresh1 = cv2.threshold(gray1, 64, 0, cv2.THRESH_BINARY)
-        edged[0:int(height*0.5), :] = thresh1              
-        region2 = image[int(height*0.85):, :]                    
-        gray2 = cv2.cvtColor(region2, cv2.COLOR_BGR2GRAY)                       
-        ret, thresh2 = cv2.threshold(gray2, 64, 0, cv2.THRESH_BINARY)        
-        edged[int(height*0.85):, :] = thresh2
-    '''
-
     edged = remove_regions(file_no, edged)
-    data = np.asarray(edged) # get the data of processed image
+    # get the data of processed image    
+    data = np.asarray(edged) 
     if file_no >= hor_region_fail_file_no:
-        midpoint = find_midpoint(data, hor_region_fail_percent_1, hor_region_fail_percent_2)
+        midpoint = find_midpoint(data, width, hor_region_fail_percent_1, hor_region_fail_percent_2)
     else:
-        midpoint = find_midpoint(data, hor_region_percent_1, hor_region_percent_2)
+        midpoint = find_midpoint(data, width, hor_region_percent_1, hor_region_percent_2)
     
     # Method 1 for getting the horizontal position of the final crack point
     # hor_midpoint = ((file_no/154)*0.5 + 0.25) * width
@@ -327,6 +305,8 @@ def crack_length(type, file_no, hor_region_percent_1, hor_region_percent_2, hor_
     cv2.imwrite(os.path.join(dir_path+'\\contours', image_name_edged), edged)
     print('Finished file number: {}'.format(file_no))
 
+width = 2048
+height = 2048
 hor_region_percent_1 = 0.1
 hor_region_percent_2 = 0.2
 hor_region_fail_percent_1 = 0.25
@@ -344,7 +324,7 @@ starting_hor_region2 = 0.1
 total = 0
 files_list = []
 for j in files:
-    crack_length(0, j, hor_region_percent_1, hor_region_percent_2, hor_region_fail_percent_1, hor_region_fail_percent_2, hor_region_fail_file_no, region_minus, region_plus, target_area_change_file_no, expansion_size, acceptable_max_difference, starting_hor_region1, starting_hor_region2)
+    crack_length(0, j, width, height, hor_region_percent_1, hor_region_percent_2, hor_region_fail_percent_1, hor_region_fail_percent_2, hor_region_fail_file_no, region_minus, region_plus, target_area_change_file_no, expansion_size, acceptable_max_difference, starting_hor_region1, starting_hor_region2)
     total += 1
     files_list.append(j)
 
