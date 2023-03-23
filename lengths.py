@@ -155,11 +155,13 @@ lengthslist = [
 ,0.132708333
 ,0.132708333
 ]
-print(len(lengthslist))
-fileslist=[*range(154)]
-plt.figure()
-plt.plot(fileslist, lengthslist)
-plt.show()
+def print_result():
+    return lengthslist
+if __name__ == '__main__':
+    fileslist=[*range(154)]
+    plt.figure()
+    plt.plot(fileslist, lengthslist)
+    plt.show()
 
 
 

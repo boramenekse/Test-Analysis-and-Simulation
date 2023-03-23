@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from natsort import natsorted
 import time
 import pathlib
+from lengths import print_result
 start_time = time.time()
 point_one_cm = 10 # [pixels]
 one_cm = point_one_cm * 10 # [pixels]
@@ -17,6 +18,7 @@ What happens in this file rn:
 -grayscale the images
 -
 '''
+manual_crack_lengths = print_result()
 
 p = pathlib.PurePath(__file__)
 source = p.parents[0] #
@@ -301,8 +303,8 @@ def crack_length(type, file_no, width, height, hor_region_percent_1, hor_region_
 
     # Saving both the image with the edge detection and the original one but with the contour and two points on it
     image_name_edged = 'a1_{}_{}_edge.bmp'.format(type, file_no)
-    cv2.imwrite(os.path.join(dir_path+'\\contours', image_name), image)
-    cv2.imwrite(os.path.join(dir_path+'\\contours', image_name_edged), edged)
+    # cv2.imwrite(os.path.join(dir_path+'\\contours', image_name), image)
+    # cv2.imwrite(os.path.join(dir_path+'\\contours', image_name_edged), edged)
     print('Finished file number: {}'.format(file_no))
 
 width = 2048
@@ -372,6 +374,7 @@ for i in range(files_list_len):
 
 plt.figure()
 plt.plot(files_list_reduced, crack_lengths_reduced, marker = '.', markerfacecolor = 'red', markersize = 7)
+plt.plot(files_list, manual_crack_lengths)
 plt.xlabel('File No')
 plt.ylabel('Crack length [m]')
 plt.title('Crack length variation over files')
