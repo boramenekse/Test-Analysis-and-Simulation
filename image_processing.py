@@ -6,7 +6,7 @@ from natsort import natsorted
 import time
 import pathlib
 start_time = time.time()
-point_one_cm = 11 # [pixels]
+point_one_cm = 10 # [pixels]
 one_cm = point_one_cm * 10 # [pixels]
 one_pixel = 1 / one_cm # [cm]
 one_pixel_m = one_pixel/100 # [m] 
@@ -358,7 +358,7 @@ print('Second method failure files: ', fail2_fail_no)
 
 crack_lengths = (np.array(crack_lengths) * one_pixel_m).tolist()
 
-all_files_critical = np.array(wrong_start_file_no + fail1_fail_no+ fail2_fail_no + no_success_file_no)
+all_files_critical = np.array(wrong_start_file_no + fail1_fail_no)
 unique_list_critical = np.unique(all_files_critical, return_counts=True)
 file_indices_critical = unique_list_critical[0].tolist()
 
@@ -371,7 +371,7 @@ for i in range(files_list_len):
         crack_lengths_reduced.append(crack_lengths[i])
 
 plt.figure()
-plt.plot(files_list, crack_lengths, marker = '.', markerfacecolor = 'red', markersize = 7)
+plt.plot(files_list_reduced, crack_lengths_reduced, marker = '.', markerfacecolor = 'red', markersize = 7)
 plt.xlabel('File No')
 plt.ylabel('Crack length [m]')
 plt.title('Crack length variation over files')
