@@ -126,7 +126,7 @@ def remove_regions(image_no, image=np.array([])):
 def preprocess(type, file_no, width, height):
     image_name = sample.lower() + '_{}_{}.bmp'.format(type, file_no)  # Access to the image
     image = cv2.imread(str(images.joinpath(image_name)))
-    image = cv2.resize(image, (width, height))  # Resize it so you can display it on your pc
+    # image = cv2.resize(image, (width, height))  # Resize it so you can display it on your pc
 
     # Grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -155,7 +155,11 @@ def find_midpoint(x, width, fraction1, fraction2):
         if (start_of_second - end_of_first - 1) % 2 != 0:
             midpoints.append(end_of_first + (start_of_second - end_of_first) / 2)
         else:
-            midpoints.append(end_of_first + (start_of_second - end_of_first - 1) / 2)
+            midpoints.append(end_of_first + (start_of_second - end_of_first + 1) / 2)
+    values, counts = np.unique(midpoints, return_counts=True)
+    max_count = max(counts.tolist())
+    most_frequent_value = int(values.tolist()[counts.tolist().index(max_count)])
+    midpoints = list(filter(lambda x: abs(most_frequent_value-x)<10, midpoints))
     mean_value = round(np.mean(np.array(midpoints)))
     return mean_value
 
@@ -171,20 +175,20 @@ def crack_length(type, file_no, width, height, hor_regions, region_minus, region
     # Getting rid of useless region by making them all black
     edged = remove_regions(file_no, edged)
 
-    cv2.imwrite('testing.bmp', edged)
+    # cv2.imwrite('testing.bmp', edged)
     hor_regions = [hor_regions[0]/2048, hor_regions[1]/2048]
     # get the data of processed image    
     data = np.asarray(edged)
 
     # Find the midpoint of the crack
     midpoint = find_midpoint(data, width, hor_regions[0], hor_regions[1])
-
+    
     # Method 1 for getting the horizontal position of the final crack point
     # hor_midpoint = ((file_no/154)*0.5 + 0.25) * width
     if file_no < target_area_change_file_no:
         target_area = data[midpoint - region_minus:midpoint + region_plus, 0: int(0.5 * width)]
     else:
-        target_area = data[midpoint - region_minus:midpoint + region_plus, 0: int(0.8 * width)]
+        target_area = data[midpoint - region_minus:midpoint + region_plus, 0: int(0.7 * width)]
     pos = []
     for i in range(0, region_minus + region_plus):
         if np.size(np.where(target_area[i, :] == 255)[0]) != 0:
@@ -360,19 +364,19 @@ def filter_crack_lengths(crack_lens, files_list):
 width = 2048
 height = 2048
 hor_region = [200, 300] # start and end column of the midpoint search region in a 2048x2048 image
-region_minus = 10
-region_plus = 10
+region_minus = 6
+region_plus = 6
 target_area_change_file_no = 10
 expansion_size = 5
 acceptable_max_difference = 5
 starting_hor_region1 = 0.08 # for checking if the correct horizontal starting position is found
 starting_hor_region2 = 0.11
-dcb_starting_point = [201, 1251]
+dcb_starting_point = [280, 310]
 
 # I put these two this way in case if you want to run the program for a part of the files 
 total = 0
 files_list = []
-for j in files:
+for j in files[:]:
     crack_length(0, j, width, height,hor_region,
                  region_minus, region_plus,
                  target_area_change_file_no, expansion_size, acceptable_max_difference,
