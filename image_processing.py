@@ -21,17 +21,32 @@ What happens in this file rn:
 '''
 manual_crack_lengths = print_result()
 
-p = pathlib.PurePath(__file__)
-sample = 'A1'  # sample name
+p = pathlib.Path(__file__)
+sample = 'A2'  # sample name
 source = p.parents[0]
 images = p.joinpath(source, sample)
+contours = p.joinpath(source, sample + '_contours')
 dir_path = str(images)
-file_start_no = 0
-file_end_no = 153
+if not contours.exists():
+    contours.mkdir()
+
+def get_folder_data(image_folder: pathlib.Path):
+    """
+    get the number of images in the folder
+    """
+    start_no = np.inf
+    end_no = 0
+    for file in image_folder.iterdir():
+        if file.suffix == '.bmp':
+            name = file.stem.split('_')
+            start_no = int(np.minimum(int(name[2]), start_no))
+            end_no = int(np.maximum(int(name[2]), end_no))
+    return start_no, end_no
+
+file_start_no, file_end_no = get_folder_data(images)
 total_files_no = file_end_no - file_start_no + 1
 types = [0, 1]
 files = [*range(file_start_no, file_end_no + 1)]
-
 
 def renaming(start, end, types):
     """
@@ -62,29 +77,9 @@ def renaming(start, end, types):
                 dir_path + '\\' + sample.lower() + '_{0}_{1}.bmp'.format(types[1], file_numbers[index])))
 
 
-# renaming(0, 153, types=types)
+# renaming(0, total_files_no - 1, types=types)
 
-def find_midpoint(x, width, fraction1, fraction2):
-    """
-    This function finds the vertical position of the midpoint of the structure, which is on the line that the crack propagates through. Therefore, it actually calculates the vertical position of the ending point of the crack. It does calculations in a region stated by the user with the help of arguments fraction1 and fraction2.
-    x: (array) the data of the image that the edge detection is used on, should only consist of 0 and 255.
-    fraction1: (float) should be between 0 and 1, it is the horizontal position of the starting point of the region that the function will do calculations on to find the midpoint.
-    fraction2: (float) horizontal position of the ending point of the region.
-    Fractions should be given such that the region consists of the structure itself, and it should be before the ruler starts.
-    """
-    data = x[:, int(fraction1 * width):int(fraction2 * width)]
-    rows, columns = data.shape
-    midpoints = []
-    for i in range(columns):
-        row_indices = np.where(data[:, i] == 255)[0]
-        end_of_first = row_indices[1]
-        start_of_second = row_indices[2]
-        if (start_of_second - end_of_first - 1) % 2 != 0:
-            midpoints.append(end_of_first + (start_of_second - end_of_first) / 2)
-        else:
-            midpoints.append(end_of_first + (start_of_second - end_of_first - 1) / 2)
-    mean_value = int(np.mean(np.array(midpoints)))
-    return mean_value
+
 
 
 success = [0]
@@ -102,12 +97,18 @@ hor_start = []
 
 
 def remove_regions(image_no, image=np.array([])):
+    '''
+    remove the regions that are not needed for the analysis
+    to specifiy pixels, use format image[height, width]
+    every pixel is 0 - 255 in grayscale
+    '''
+
     height, width = image.shape
     image[:height // 2, :] = 0  # region1
-    x0 = np.array([0, 0]) / 2048 * width
-    x1 = np.array([1250, 1250]) / 2048 * width
-    y0 = np.array([1400, 1900]) / 2048 * height
-    y1 = np.array([1400, 1650]) / 2048 * height
+    x0 = np.array([0, 0]) / 2048 * width  # x coords of starting points
+    x1 = np.array([1250, 1250]) / 2048 * width  # x coords of ending points
+    y0 = np.array([1400, 1950]) / 2048 * height  # y coords of starting points
+    y1 = np.array([1400, 1650]) / 2048 * height  # y coords of ending points
     x2 = [2048, 2048]
     y2 = [1400, 1650]
     progress = image_no / total_files_no
@@ -134,37 +135,49 @@ def preprocess(type, file_no, width, height):
 
     # Find Canny edges
     edged = cv2.Canny(gray, 30, 200)  # edge detection
-    return edged
+    return image, gray, edged
 
+def find_midpoint(x, width, fraction1, fraction2):
+    """
+    This function finds the vertical position of the midpoint of the structure, which is on the line that the crack propagates through. Therefore, it actually calculates the vertical position of the ending point of the crack. It does calculations in a region stated by the user with the help of arguments fraction1 and fraction2.
+    x: (array) the data of the image that the edge detection is used on, should only consist of 0 and 255.
+    fraction1: (float) should be between 0 and 1, it is the horizontal position of the starting point of the region that the function will do calculations on to find the midpoint.
+    fraction2: (float) horizontal position of the ending point of the region.
+    Fractions should be given such that the region consists of the structure itself, and it should be before the ruler starts.
+    """
+    data = x[:, int(fraction1 * width):int(fraction2 * width)]
+    rows, columns = data.shape
+    midpoints = []
+    for i in range(columns):
+        row_indices = np.where(data[:, i] == 255)[0]
+        end_of_first = row_indices[1]
+        start_of_second = row_indices[2]
+        if (start_of_second - end_of_first - 1) % 2 != 0:
+            midpoints.append(end_of_first + (start_of_second - end_of_first) / 2)
+        else:
+            midpoints.append(end_of_first + (start_of_second - end_of_first - 1) / 2)
+    mean_value = round(np.mean(np.array(midpoints)))
+    return mean_value
 
-def crack_length(type, file_no, width, height, hor_region_percent_1, hor_region_percent_2, hor_region_fail_percent_1,
-                 hor_region_fail_percent_2, hor_region_fail_file_no, region_minus, region_plus,
+def crack_length(type, file_no, width, height, hor_regions, region_minus, region_plus,
                  target_area_change_file_no, expansion_size, acceptable_max_difference, starting_hor_region1,
-                 starting_hor_region2):
+                 starting_hor_region2, dcb_starting_point: [int, int]):
     """
     parameters the function needs:
     type, file_no, region_fail_file_no, region_vert1, region_vert2, midpoint_fail_file_no (caused by region filtering), target_area_fail_no, target_area_region_hor1, target_area_region2, method2_plus_minus, expansion_size (for checking the contour), acceptable_difference (for checking the method's results), starting_point_check1, starting_point_check2
     """
-    image_name = sample.lower() + '_{}_{}.bmp'.format(type, file_no)  # Access to the image
-    image = cv2.imread(str(images.joinpath(image_name)))
-    image = cv2.resize(image, (width, height))  # Resize it so you can display it on your pc
-
-    # Grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    gray = cv2.fastNlMeansDenoising(gray, None, 22, 7, 21)  # removing noise
-    gray = cv2.GaussianBlur(gray, (3, 3), 0)  # makes the image blur
-
-    # Find Canny edges
-    edged = cv2.Canny(gray, 30, 200)  # edge detection
+    image, gray, edged = preprocess(type, file_no, width, height)
 
     # Getting rid of useless region by making them all black
     edged = remove_regions(file_no, edged)
+
+    cv2.imwrite('testing.bmp', edged)
+    hor_regions = [hor_regions[0]/2048, hor_regions[1]/2048]
     # get the data of processed image    
     data = np.asarray(edged)
-    if file_no >= hor_region_fail_file_no:
-        midpoint = find_midpoint(data, width, hor_region_fail_percent_1, hor_region_fail_percent_2)
-    else:
-        midpoint = find_midpoint(data, width, hor_region_percent_1, hor_region_percent_2)
+
+    # Find the midpoint of the crack
+    midpoint = find_midpoint(data, width, hor_regions[0], hor_regions[1])
 
     # Method 1 for getting the horizontal position of the final crack point
     # hor_midpoint = ((file_no/154)*0.5 + 0.25) * width
@@ -306,7 +319,10 @@ def crack_length(type, file_no, width, height, hor_region_percent_1, hor_region_
         hor_start.append(starting_hor)
     else:
         wrong_start_file_no.append(file_no)
-        starting_hor = hor_start[-1]
+        if hor_start == []:
+            hor_start.append(dcb_starting_point[0])
+        else:
+            starting_hor = hor_start[-1]
 
     # Calculate the crack length as a percentage relative to the whole width of the image
     crack_lengths.append(crack_pos[0] - starting_hor)
@@ -320,9 +336,10 @@ def crack_length(type, file_no, width, height, hor_region_percent_1, hor_region_
     cv2.line(edged, [0, midpoint], [width, midpoint], (255, 255, 255))
 
     # Saving both the image with the edge detection and the original one but with the contour and two points on it
-    image_name_edged = 'a1_{}_{}_edge.bmp'.format(type, file_no)
-    # cv2.imwrite(os.path.join(dir_path+'\\contours', image_name), image)
-    # cv2.imwrite(os.path.join(dir_path+'\\contours', image_name_edged), edged)
+    image_name_countour = sample.lower() + '_{}_{}_contour.bmp'.format(type, file_no)
+    image_name_edged = sample.lower() + '_{}_{}_edge.bmp'.format(type, file_no)
+    cv2.imwrite(os.path.join(dir_path+'_contours', image_name_countour), image)
+    cv2.imwrite(os.path.join(dir_path+'_contours', image_name_edged), edged)
     print('Finished file number: {}'.format(file_no))
 
 def filter_crack_lengths(crack_lens, files_list):
@@ -331,7 +348,7 @@ def filter_crack_lengths(crack_lens, files_list):
     filtered = np.array([prev_len])
     for file in files_list[1:]:
         current_len = next(len_iterator)
-        invalid = abs(current_len - prev_len) > 0.3 * prev_len
+        invalid = abs(current_len - prev_len) > 0.005
         if invalid:
             filtered = np.append(filtered, np.nan)
         else:
@@ -342,27 +359,25 @@ def filter_crack_lengths(crack_lens, files_list):
 
 width = 2048
 height = 2048
-hor_region_percent_1 = 0.1
-hor_region_percent_2 = 0.2
-hor_region_fail_percent_1 = 0.25
-hor_region_fail_percent_2 = 0.3
-hor_region_fail_file_no = 108
+hor_region = [200, 300] # start and end column of the midpoint search region in a 2048x2048 image
 region_minus = 10
 region_plus = 10
 target_area_change_file_no = 10
 expansion_size = 5
 acceptable_max_difference = 5
-starting_hor_region1 = 0.07
-starting_hor_region2 = 0.1
+starting_hor_region1 = 0.08 # for checking if the correct horizontal starting position is found
+starting_hor_region2 = 0.11
+dcb_starting_point = [201, 1251]
 
 # I put these two this way in case if you want to run the program for a part of the files 
 total = 0
 files_list = []
 for j in files:
-    crack_length(0, j, width, height, hor_region_percent_1, hor_region_percent_2, hor_region_fail_percent_1,
-                 hor_region_fail_percent_2, hor_region_fail_file_no, region_minus, region_plus,
-                 target_area_change_file_no, expansion_size, acceptable_max_difference, starting_hor_region1,
-                 starting_hor_region2)
+    crack_length(0, j, width, height,hor_region,
+                 region_minus, region_plus,
+                 target_area_change_file_no, expansion_size, acceptable_max_difference,
+                 starting_hor_region1,
+                 starting_hor_region2, dcb_starting_point)
     total += 1
     files_list.append(j)
 
@@ -399,7 +414,8 @@ print('Second method failure files: ', fail2_fail_no)
 
 crack_lengths = (np.array(crack_lengths) * one_pixel_m).tolist()
 
-all_files_critical = np.array(wrong_start_file_no + fail1_fail_no + no_success_file_no)
+all_files_critical = np.array(wrong_start_file_no)
+''' + fail1_fail_no + no_success_file_no'''
 unique_list_critical = np.unique(all_files_critical, return_counts=True)
 file_indices_critical = unique_list_critical[0].tolist()
 
@@ -412,8 +428,8 @@ for i in range(files_list_len):
         crack_lengths_reduced.append(crack_lengths[i])
 
 plt.figure()
-plt.plot(files_list_reduced, crack_lengths_reduced, marker = '.', markerfacecolor = 'red', markersize = 7)
-plt.plot(files_list, manual_crack_lengths)
+plt.plot(files_list, crack_lengths, marker='.', markerfacecolor='red', markersize=7)
+#plt.plot(files_list, manual_crack_lengths)
 plt.xlabel('File No')
 plt.ylabel('Crack length [m]')
 plt.title('Crack length variation over files')
