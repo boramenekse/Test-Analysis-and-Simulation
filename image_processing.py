@@ -186,14 +186,16 @@ def find_midpoint(x, width, fraction1, fraction2):
     return mean_value
 
 
-def method_one(prev_cracktip, image, midpoint):
+def method_one(prev_cracktip, image, midpoint, file_no):
     lean = midpoint - np.nonzero(image[:, -1])[0][0] - 10  # for the dcb not being straight
-    vertical_bounds = [midpoint - round(height/200) - lean // 2, midpoint + round(height/200) - lean // 2]
-    horizontal_bounds = [prev_cracktip - round(width/200), prev_cracktip + round(width/40)]
+    center = round(midpoint - 8 - (file_no/total_files_no) * lean)  # calculate the expected vertical position of the cracktip
+    vertical_bounds = [center - round(height/300), center + round(height/300)]
+    horizontal_bounds = [prev_cracktip - round(width/300), prev_cracktip + round(width/60)]
 
+    # pretty self explanatory
     target_area = image[vertical_bounds[0]:vertical_bounds[1], horizontal_bounds[0]:horizontal_bounds[1]]
     tip_column_index = horizontal_bounds[0] + np.argwhere(target_area)[:, 1].max()
-    return tip_column_index
+    return center, tip_column_index
 
 
 def crack_length(type, file_no, width, height, hor_regions, region_minus, region_plus,
@@ -219,169 +221,24 @@ def crack_length(type, file_no, width, height, hor_regions, region_minus, region
     # Find the midpoint of the crack
     midpoint = find_midpoint(edged, width, hor_regions[0], hor_regions[1])
 
-    # Method 1 for getting the horizontal position of the final crack point
-    # hor_midpoint = ((file_no/154)*0.5 + 0.25) * width
+    lean = midpoint - np.nonzero(edged[:, -1])[0][0] - 10  # for the dcb not being straight
+    center = round(midpoint - 8 - (file_no / total_files_no) * lean)
 
-    '''
-    target_area = edged[midpoint - region_minus:midpoint + region_plus, 0: int(0.5 * width)]
-
-    pos = []
-    for i in range(0, region_minus + region_plus):
-        if np.size(np.where(target_area[i, :] == 255)[0]) != 0:
-            pos.append(np.where(target_area[i, :] == 255)[0].max())
-    crack_hor = max(pos)
-    crack_pos1 = [crack_hor, midpoint]
-    '''
-
-    '''
-    # Finding Contours
-    # Use a copy of the image e.g. edged.copy() since findContours alters the image
-    contours, hierarchy = cv2.findContours(edged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-
-    # Find the contour with the highest arc length
-    perimeters = [cv2.arcLength(c, True) for c in contours]
-    max_index = np.argmax(perimeters)
-    cnt_arc = contours[max_index]
-    arc_cnt = np.resize(cnt_arc, (cnt_arc.shape[0], cnt_arc.shape[-1]))
-    vert = arc_cnt[:, 1]
-    hor = arc_cnt[:, 0]
-    '''
     # crack tip location with method 1
     method_one_fail = False
-    if file_no <20:
-        crack_pos1 = np.array([midpoint, 485])
+    if file_no < 20:
+        crack_pos1 = np.array([center, 485])
     else:
         try:
-            crack_pos1 = np.array([midpoint, method_one(cracktips[file_no - 1, 1], edged, midpoint)])
+            crack_pos1 = np.array(method_one(cracktips[file_no - 1, 1], edged, midpoint, file_no))
         except:
             crack_pos1 = cracktips[file_no - 1, :]
             method_one_fail = True
 
     time3 = time.time()
-    # crack_hor = crack_pos1[1]
 
-    # Draw all contours
-    # -1 signifies drawing all contours
-    # cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
-
-    '''
-    # Method 2 for getting the horizontal position of final crack point
-    index = 0
-    points = []
-    indices_points = []
-    for i in arc_cnt:
-        if (i[1] == midpoint) or (i[1] == midpoint - 1) or (i[1] == midpoint - 2) or (i[1] == midpoint + 1) or (
-                i[1] == midpoint + 2) or (i[1] == midpoint - 3) or (i[1] == midpoint + 3) or (i[1] == midpoint - 4) or (
-                i[1] == midpoint + 4) or (i[1] == midpoint - 5) or (i[1] == midpoint + 5):
-            points.append(i)
-            indices_points.append(arc_cnt[index])
-        index += 1
-    points_np = np.array(points)
-    crack_pos2 = np.zeros(2)
-    if points_np.shape[0] > 0:
-        points_np_max_vert = points_np[:, 1].max()
-        if points_np_max_vert == midpoint:
-            crack_pos2[0] = points_np[:, 0].max()
-            crack_pos2[1] = midpoint
-        elif points_np_max_vert == midpoint - 1:
-            crack_pos2[0] = points_np[:, 0].max()
-            crack_pos2[1] = midpoint - 1
-        elif points_np_max_vert == midpoint + 1:
-            crack_pos2[0] = points_np[:, 0].max()
-            crack_pos2[1] = midpoint + 1
-        elif points_np_max_vert == midpoint - 2:
-            crack_pos2[0] = points_np[:, 0].max()
-            crack_pos2[1] = midpoint - 2
-        elif points_np_max_vert == midpoint + 2:
-            crack_pos2[0] = points_np[:, 0].max()
-            crack_pos2[1] = midpoint + 2
-        elif points_np_max_vert == midpoint - 3:
-            crack_pos2[0] = points_np[:, 0].max()
-            crack_pos2[1] = midpoint - 3
-        elif points_np_max_vert == midpoint + 3:
-            crack_pos2[0] = points_np[:, 0].max()
-            crack_pos2[1] = midpoint + 3
-        elif points_np_max_vert == midpoint - 4:
-            crack_pos2[0] = points_np[:, 0].max()
-            crack_pos2[1] = midpoint - 4
-        elif points_np_max_vert == midpoint + 4:
-            crack_pos2[0] = points_np[:, 0].max()
-            crack_pos2[1] = midpoint + 4
-        elif points_np_max_vert == midpoint - 5:
-            crack_pos2[0] = points_np[:, 0].max()
-            crack_pos2[1] = midpoint - 5
-        elif points_np_max_vert == midpoint + 5:
-            crack_pos2[0] = points_np[:, 0].max()
-            crack_pos2[1] = midpoint + 5
-    crack_pos2 = crack_pos2.astype(int)
-    '''
-    '''
-    # If first method fails to get it right, use the second method's result
-    # The problem with the second method is that it might be underestimating the crack position
-    # I think first method works better, but it fails under specific conditions such as when the structure is not straight (bended downwards) -> that's why it fails in the first 20 files
-    crack_pos = []
-    if crack_pos1[1] >= int(0.9 * width) and not (crack_pos2 == np.zeros(2)).any():
-        crack_pos = crack_pos2
-        fail_count1[0] += 1  # If the first method fails to get the right crack position
-        fail1_fail_no.append(file_no)
-    elif crack_pos1[1] < int(0.9 * width) and not (crack_pos2 == np.zeros(2)).any():
-        crack_pos = crack_pos1
-    else:
-        fail_count2[0] += 1  # If the second method fails to capture the crack position
-        fail2_fail_no.append(file_no)
-        crack_pos = crack_pos1
-    crack_pos = np.array(crack_pos).astype(int)
-
-    # Checking if the first method's result is near to the contour with the highest arc length
-    # This allows us to check if both methods give almost the same result since the second method uses the contour with the highest arc length to calculate the crack position
-    # It also assess how well the code captures the right contour, whether it captures either the top or bottom side of the structure and it goes until the crack point -> usability of it
-    dimension = 2 * expansion_size + 1
-    check_matrix_rows = np.full(dimension, crack_hor)
-    check_matrix_columns = np.full(dimension, midpoint)
-    check_matrix = []
-    operation = []
-    for i in range(expansion_size + 1):
-        if i == 0:
-            operation.append(0)
-        else:
-            operation.append(i)
-            operation.append(-i)
-    operation.sort()
-    for i in range(dimension):
-        for j in range(dimension):
-            check_matrix.append([check_matrix_rows[i] + operation[i], check_matrix_columns[i] + operation[j]])
-
-    problem_count = 0
-    boolean_matrix = np.isin(arc_cnt, check_matrix)
-    for i in boolean_matrix:
-        if i.all():
-            success[0] += 1
-            problem_count += 1
-            break
-    if problem_count == 0:
-        no_success_file_no.append(file_no)
-
-    # Check if both methods give almost the same point
-    if (abs(crack_pos1[1] - crack_pos2[0]) < acceptable_max_difference + 1) and (
-            abs(crack_pos1[0] - crack_pos2[1]) < acceptable_max_difference + 1):
-        match_count[0] += 1
-    else:
-        match_fail_file_no.append(file_no)
-
-    # Check if it captures the starting horizontal position of the structure correct
-    # This is crucial for calculating the crack length correct
-    # If it does that, it is likely to capture the crack point as well
-    starting_hor = hor.min()
-    if (starting_hor >= int(starting_hor_region1 * width)) and (starting_hor < int(starting_hor_region2 * width)):
-        start_hor_count[0] += 1
-        hor_start.append(starting_hor)
-    else:
-        wrong_start_file_no.append(file_no)
-        if hor_start == []:
-            hor_start.append(dcb_starting_point[0])
-        else:
-            starting_hor = hor_start[-1]
-    '''
+    lean = midpoint - np.nonzero(edged[:, -1])[0][0] - 10  # for the dcb not being straight
+    center = round(midpoint - 8 - (file_no / total_files_no) * lean)
 
     # horizontal starting point determination
 
@@ -390,16 +247,12 @@ def crack_length(type, file_no, width, height, hor_regions, region_minus, region
     crack_lengths.append(1500 - (endpoint - crack_pos1[1]))
     starting_hor = (endpoint - 1500)
 
-    crack_pos = np.flip(crack_pos1)
-
-    # Drawing the contour with the highest arc length, the crack position, and the starting horizontal position of the structure on the image 
-    # cv2.drawContours(image, cnt_arc, -1, (255, 0, 0), 3)
-    if 20 < file_no < 40:
-        cv2.rectangle(image, [crack_pos[0], crack_pos[1]], [crack_pos[0] + 3, crack_pos[1] + 3], (0, 0, 255), -1)
-        cv2.rectangle(image, [starting_hor, crack_pos[1]], [starting_hor + 3, crack_pos[1] + 3], (0, 0, 255), -1)
+    if file_no % 10 == 0:
+        cv2.rectangle(image, [crack_pos1[1], crack_pos1[0]], [crack_pos1[1] + 3, crack_pos1[0] + 3], (0, 0, 255), -1)
+        cv2.rectangle(image, [starting_hor, crack_pos1[0]], [starting_hor + 3, crack_pos1[0] + 3], (0, 0, 255), -1)
 
         # Drawing the midpoint line on the image with edge detection
-        cv2.line(edged, [0, midpoint], [width, midpoint], (255, 255, 255))
+        cv2.line(edged, [0, center], [width, center], (255, 255, 255))
 
         # Saving both the image with the edge detection and the original one but with the contour and two points on it
         image_name_countour = sample.lower() + '_{}_{}_contour.bmp'.format(type, file_no)
@@ -498,15 +351,15 @@ plt.xlabel('File No')
 plt.ylabel('Crack length [m]')
 plt.title('Crack length variation over files')
 plt.grid()
-plt.savefig(sample + '\\Crack_length_in_each_file.png')
+plt.savefig(sample + '\\Crack_length_in_each_file.png', dpi=300)
 cv2.destroyAllWindows()
 
 #filter the crack lenghts and save them
 filtered = filter_crack_lengths(crack_lengths, files_list)
 crack_len_file = np.vstack((files_list, filtered))
 
-np.savetxt((sample+'_crack_lengths.txt'), crack_len_file)
-
+np.savetxt((sample+'_crack_lengths_filtered.txt'), crack_len_file)
+np.savetxt((sample+'_crack_lengths.txt'), crack_lengths)
 end_time = time.time()
 print('Execution time of the program: ', end_time - start_time, '[s]')
 
