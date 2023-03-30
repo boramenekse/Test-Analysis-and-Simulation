@@ -8,10 +8,7 @@ import pathlib
 from lengths import print_result
 
 start_time = time.time()
-point_one_cm = 10 # [pixels]
-one_cm = point_one_cm * 10 # [pixels]
-one_pixel = 1 / one_cm # [cm]
-one_pixel_m = one_pixel/100 # [m]
+
 '''
 What happens in this file rn:
 -unformize all the names
@@ -24,13 +21,17 @@ What happens in this file rn:
 What to change: 
 - sample name
 - dcb starting point
-- 15cm point travel
-
+- 14cm point travel
+- top side of the sample to remove in remove_regions
+- bottom side of the sample to remove in remove_regions
+- crack position relative to the midpoint in method_one
+- starting file number in line 234
+- starting crack position in line 235
 '''
 manual_crack_lengths = print_result()
 
 p = pathlib.Path(__file__)
-sample = 'A2'  # sample name
+sample = 'A4'  # sample name
 source = p.parents[0]
 images = p.joinpath(source, sample)
 contours = p.joinpath(source, sample + '_contours')
@@ -56,6 +57,7 @@ total_files_no = file_end_no - file_start_no + 1
 types = [0, 1]
 files = [*range(file_start_no, file_end_no + 1)]
 
+
 def renaming(start, end, types):
     """
     This function is for renaming the images in a way that we can iterate over them easily.
@@ -69,7 +71,7 @@ def renaming(start, end, types):
     # Iterate directory
     for path in os.listdir(dir_path):
         # check if current path is a file
-        if os.path.isfile(os.path.join(dir_path, path)):
+        if os.path.isfile(os.path.join(dir_path, path)) and path.endswith('.bmp'):
             files.append(path)
     files = natsorted(files)
 
@@ -85,10 +87,9 @@ def renaming(start, end, types):
                 dir_path + '\\' + sample.lower() + '_{0}_{1}.bmp'.format(types[1], file_numbers[index])))
 
 
-# renaming(0, total_files_no - 1, types=types)
-
-
-
+file_0 = sample.lower() + '_0_0.bmp'
+if not images.joinpath(file_0).exists():
+    renaming(0, total_files_no - 1, types=types)
 
 success = [0]
 no_success_file_no = []
@@ -107,38 +108,46 @@ hor_start = []
 
 width = 2048
 height = 2048
-hor_region = [200, 300] # start and end column of the midpoint search region in a 2048x2048 image
+hor_region = [200, 250] # start and end column of the midpoint search region in a 2048x2048 image
 region_minus = 10
 region_plus = 10
 expansion_size = 5
 acceptable_max_difference = 5
 starting_hor_region1 = 0.08 # for checking if the correct horizontal starting position is found
 starting_hor_region2 = 0.11
-dcb_starting_point = [201, 1251]
-fifteencm_point_travel = [1991, 1911]
-# get the horizontal position of the 15cm point, assuming it moves linearly
-fifteencm_point = lambda x: fifteencm_point_travel[0] + (fifteencm_point_travel[1] - fifteencm_point_travel[0]) * x/total_files_no
+dcb_starting_point = [210, 70]
+fourteencm_point_travel = [1977, 1889]
+fourteencm_dist = 1528
+
+point_one_cm = fourteencm_dist/14 # [pixels]
+one_cm = point_one_cm * 10 # [pixels]
+one_pixel = 1 / one_cm # [cm]
+one_pixel_m = one_pixel/100 # [m]
+# get the horizontal position of the 14cm point, assuming it moves linearly
+fourteencm_point = lambda x: fourteencm_point_travel[0] + (fourteencm_point_travel[1] - fourteencm_point_travel[0]) * x / total_files_no
 
 
 
-def remove_regions(image_no, image=np.array([])):
+def remove_regions(image_no, image :np.array([])):
     '''
     remove the regions that are not needed for the analysis
     to specifiy pixels, use format image[height, width]
     every pixel is 0 - 255 in grayscale
     '''
-
     height, width = image.shape
-    image[:round(height*0.6), :] = 0  # region1
-    x0 = np.array([0, 0]) / 2048 * width  # x coords of starting points
-    x1 = np.array([1250, 1250]) / 2048 * width  # x coords of ending points
-    y0 = np.array([1400, 1950]) / 2048 * height  # y coords of starting points
-    y1 = np.array([1400, 1650]) / 2048 * height  # y coords of ending points
-    x2 = [2048, 2048]
-    y2 = [1400, 1650]
+    # region 1
+    image[:round(height*0.065), :] = 0
+
+    # region2
+    P0_0 = [300, 0]
+    P1_0 = [280, 1110]
+    P0_1 = [940, 0]
+    P1_1 = [623, 1295]
+
+    # formula: starting point + (ending point - starting point) * progress
     progress = image_no / total_files_no
-    point0 = [round(x0[0] + (x0[1] - x0[0]) * progress), round(y0[0] + (y0[1] - y0[0]) * progress)]
-    point1 = [round(x1[0] + (x1[1] - x1[0]) * progress), round(y1[0] + (y1[1] - y1[0]) * progress)]
+    point0 = [round(P0_0[1] + (P0_1[1] - P0_0[1]) * progress), round(P0_0[0] + (P0_1[0] - P0_0[0]) * progress)]
+    point1 = [round(P1_0[1] + (P1_1[1] - P1_0[1]) * progress), round(P1_0[0] + (P1_1[0] - P1_0[0]) * progress)]
     image[point1[1]:, point1[0]:] = 0  # region2
 
     # region3
@@ -155,11 +164,13 @@ def preprocess(type, file_no, width, height):
 
     # Grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray = remove_regions(file_no, gray)  # remove the regions that are not needed for the analysis
     gray = cv2.fastNlMeansDenoising(gray, None, 20, 7, 21)  # removing noise
     gray = cv2.GaussianBlur(gray, (3, 3), 0)  # makes the image blur
 
     # Find Canny edges
-    edged = cv2.Canny(gray, 30, 200)  # edge detection
+    edged = cv2.Canny(gray, 60, 100)  # edge detection
+
     return image, gray, edged
 
 
@@ -186,13 +197,23 @@ def find_midpoint(x, width, fraction1, fraction2):
     return mean_value
 
 
-def method_one(prev_cracktip, image, midpoint, file_no):
-    lean = midpoint - np.nonzero(image[:, -1])[0][0] - 10  # for the dcb not being straight
-    center = round(midpoint - 8 - (file_no/total_files_no) * lean)  # calculate the expected vertical position of the cracktip
-    vertical_bounds = [center - round(height/300), center + round(height/300)]
-    horizontal_bounds = [prev_cracktip - round(width/300), prev_cracktip + round(width/60)]
+def find_center(image, midpoint, file_no):
+    """
+    This function finds the vertical position of the cracktip. It does calculations in a region stated by the user with the help of arguments fraction1 and fraction2.
+    image: (array) the data of the image that the edge detection is used on, should only consist of 0 and 255.
+    midpoint: (int) the vertical position of the midpoint of the structure, which is on the line that the crack propagates through. Therefore, it actually calculates the vertical position of the ending point of the crack.
+    """
+    lean = midpoint - np.nonzero(image[:, -1])[0][0] - 22  # for the dcb not being straight
+    center = round(midpoint - 5 - (0.6*(file_no/total_files_no) + 0.0) * lean)  # calculate the expected vertical position of the cracktip
+    return center
 
-    # pretty self explanatory
+
+def method_one(prev_cracktip, image, midpoint, file_no):
+    center = find_center(image, midpoint, file_no)
+    vertical_bounds = [center - round(height/300), center + round(height/300)]
+    horizontal_bounds = [prev_cracktip - round(width/300), prev_cracktip + round(width/30)]
+
+    # pretty self-explanatory
     target_area = image[vertical_bounds[0]:vertical_bounds[1], horizontal_bounds[0]:horizontal_bounds[1]]
     tip_column_index = horizontal_bounds[0] + np.argwhere(target_area)[:, 1].max()
     return center, tip_column_index
@@ -209,7 +230,6 @@ def crack_length(type, file_no, width, height, hor_regions, region_minus, region
     image, gray, edged = preprocess(type, file_no, width, height)
 
     # Getting rid of useless region by making them all black
-    edged = remove_regions(file_no, edged)
 
     # save the image to see whether the preprocessing works
     # cv2.imwrite('testing.bmp', edged)
@@ -220,14 +240,12 @@ def crack_length(type, file_no, width, height, hor_regions, region_minus, region
     time2 = time.time()
     # Find the midpoint of the crack
     midpoint = find_midpoint(edged, width, hor_regions[0], hor_regions[1])
-
-    lean = midpoint - np.nonzero(edged[:, -1])[0][0] - 10  # for the dcb not being straight
-    center = round(midpoint - 8 - (file_no / total_files_no) * lean)
+    center = find_center(edged, midpoint, file_no)
 
     # crack tip location with method 1
     method_one_fail = False
-    if file_no < 20:
-        crack_pos1 = np.array([center, 485])
+    if file_no < 24:
+        crack_pos1 = np.array([center, 464])
     else:
         try:
             crack_pos1 = np.array(method_one(cracktips[file_no - 1, 1], edged, midpoint, file_no))
@@ -237,15 +255,13 @@ def crack_length(type, file_no, width, height, hor_regions, region_minus, region
 
     time3 = time.time()
 
-    lean = midpoint - np.nonzero(edged[:, -1])[0][0] - 10  # for the dcb not being straight
-    center = round(midpoint - 8 - (file_no / total_files_no) * lean)
 
     # horizontal starting point determination
 
     # Calculate the crack length in pixels from the position of the ruler
-    endpoint = round(fifteencm_point(file_no))
-    crack_lengths.append(1500 - (endpoint - crack_pos1[1]))
-    starting_hor = (endpoint - 1500)
+    endpoint = round(fourteencm_point(file_no))
+    crack_lengths.append(fourteencm_dist - (endpoint - crack_pos1[1]))
+    starting_hor = (endpoint - fourteencm_dist)
 
     if file_no % 10 == 0:
         cv2.rectangle(image, [crack_pos1[1], crack_pos1[0]], [crack_pos1[1] + 3, crack_pos1[0] + 3], (0, 0, 255), -1)
@@ -359,7 +375,6 @@ filtered = filter_crack_lengths(crack_lengths, files_list)
 crack_len_file = np.vstack((files_list, filtered))
 
 np.savetxt((sample+'_crack_lengths_filtered.txt'), crack_len_file)
-np.savetxt((sample+'_crack_lengths.txt'), crack_lengths)
+np.savetxt((sample+'_crack_lengths.txt'), np.vstack((files_list, filtered)).T)
 end_time = time.time()
 print('Execution time of the program: ', end_time - start_time, '[s]')
-
