@@ -109,7 +109,7 @@ hor_start = []
 
 width = 2048
 height = 2048
-hor_region = [200, 250] # start and end column of the midpoint search region in a 2048x2048 image
+hor_region = [200, 250]  # start and end column of the midpoint search region in a 2048x2048 image
 region_minus = 10
 region_plus = 10
 expansion_size = 5
@@ -225,17 +225,30 @@ def method_one(prev_cracktip, image, midpoint, file_no):
     tip_column_index = horizontal_bounds[0] + np.argwhere(target_area)[:, 1].max()
     return center, tip_column_index
 
-def method_two(prev_cracktip, image, center, file_no):
-    vertical_bounds = [center - round(height / 300), center + round(height / 300)]
-    horizontal_bounds = [prev_cracktip - round(width / 300), prev_cracktip + round(width / 30)]
 
+def method_two(prev_cracktip, image, center, conditionregion=[3, 6]):
+    """
+    Find the horizontal position of the cracktip, in a region around [center, prev_cracktip]
+    The condition is to have at least one white pixel in each column in a region defined by conditionregion
+    This ingores the millimetre markings on the ruler, as they are only 5 pixel wide
+    """
+    vertical_bounds = [center - round(height / 300), center + round(height / 300)]
+    horizontal_bounds = [prev_cracktip - round(width / 100), prev_cracktip + round(width / 30)]
+
+    # target area normalization
     target_area = image[vertical_bounds[0]:vertical_bounds[1], horizontal_bounds[0]:horizontal_bounds[1]]
     target_ones = np.heaviside(target_area, 0)
-    vconvolved = convolve2d(target_ones, np.ones((3, 1)), mode='valid')
+
+    # get the whether a vertical region has a white pixel
+    vconvolved = convolve2d(target_ones, np.ones((conditionregion[0], 1)), mode='valid')
     vconvolved = np.heaviside(vconvolved, 0)
-    hconvolved = convolve2d(vconvolved, np.ones((1, 6)), mode='valid')
-    hconvolved = np.heaviside(hconvolved-5, 0)
-    tip_column_index = horizontal_bounds[0] + np.argwhere(hconvolved)[:, 1].max() + 5
+
+    # detect whether all pixel in a horizonatal region are white
+    hconvolved = convolve2d(vconvolved, np.ones((1, conditionregion[1])), mode='valid')
+    hconvolved = np.heaviside(hconvolved - conditionregion[1] + 1, 0)
+
+    # get the index of the rightmost region that satisfies the condition
+    tip_column_index = horizontal_bounds[0] + np.argwhere(hconvolved)[:, 1].max() + conditionregion[1] - 1
     return center, tip_column_index
 
 
@@ -275,7 +288,7 @@ def crack_length(type, file_no, width, height, hor_regions, region_minus, region
         crack_pos1 = np.array([center, 364])
     else:
         try:
-            crack_pos1 = np.array(method_two(cracktips[file_no - 1, 1], edged, midpoint, file_no))
+            crack_pos1 = np.array(method_two(cracktips[file_no - 1, 1], edged, midpoint, [3, 6]))
         except:
             crack_pos1 = cracktips[file_no - 1, :]
             method_one_fail = True
