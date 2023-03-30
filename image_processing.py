@@ -6,6 +6,7 @@ from natsort import natsorted
 import time
 import pathlib
 from lengths import print_result
+from scipy.signal import convolve2d
 
 start_time = time.time()
 
@@ -31,7 +32,7 @@ What to change:
 manual_crack_lengths = print_result()
 
 p = pathlib.Path(__file__)
-sample = 'A4'  # sample name
+sample = 'C3'  # sample name
 source = p.parents[0]
 images = p.joinpath(source, sample)
 contours = p.joinpath(source, sample + '_contours')
@@ -115,11 +116,11 @@ expansion_size = 5
 acceptable_max_difference = 5
 starting_hor_region1 = 0.08 # for checking if the correct horizontal starting position is found
 starting_hor_region2 = 0.11
-dcb_starting_point = [210, 70]
-fourteencm_point_travel = [1977, 1889]
-fourteencm_dist = 1528
+dcb_starting_point = [220, 23]
+fourteencm_point_travel = [1886, 1780]
+fourteencm_dist = 1534
 
-point_one_cm = fourteencm_dist/14 # [pixels]
+point_one_cm = fourteencm_dist/140 # [pixels]
 one_cm = point_one_cm * 10 # [pixels]
 one_pixel = 1 / one_cm # [cm]
 one_pixel_m = one_pixel/100 # [m]
@@ -136,13 +137,13 @@ def remove_regions(image_no, image :np.array([])):
     '''
     height, width = image.shape
     # region 1
-    image[:round(height*0.065), :] = 0
+    image[:round(height*170/2048), :] = 0
 
     # region2
-    P0_0 = [300, 0]
-    P1_0 = [280, 1110]
-    P0_1 = [940, 0]
-    P1_1 = [623, 1295]
+    P0_0 = [330, 0]
+    P1_0 = [320, 1242]
+    P0_1 = [1096, 0]
+    P1_1 = [700, 1242]
 
     # formula: starting point + (ending point - starting point) * progress
     progress = image_no / total_files_no
@@ -169,7 +170,7 @@ def preprocess(type, file_no, width, height):
     gray = cv2.GaussianBlur(gray, (3, 3), 0)  # makes the image blur
 
     # Find Canny edges
-    edged = cv2.Canny(gray, 60, 100)  # edge detection
+    edged = cv2.Canny(gray, 25, 120)  # edge detection
 
     return image, gray, edged
 
@@ -187,15 +188,21 @@ def find_midpoint(x, width, fraction1, fraction2):
     midpoints = []
     for i in range(columns):
         row_indices = np.where(data[:, i] == 255)[0]
-        end_of_first = row_indices[1]
-        start_of_second = row_indices[2]
+        if np.size(row_indices) >= 3:
+            end_of_first = row_indices[1]
+            start_of_second = row_indices[2]
+        else:
+            continue
         if (start_of_second - end_of_first - 1) % 2 != 0:
             midpoints.append(end_of_first + (start_of_second - end_of_first) / 2)
         else:
             midpoints.append(end_of_first + (start_of_second - end_of_first - 1) / 2)
+    values, counts = np.unique(midpoints, return_counts=True)
+    max_count = max(counts.tolist())
+    most_frequent_value = int(values.tolist()[counts.tolist().index(max_count)])
+    midpoints = list(filter(lambda x: abs(most_frequent_value - x) < 10, midpoints))
     mean_value = round(np.mean(np.array(midpoints)))
-    return mean_value
-
+    return most_frequent_value
 
 def find_center(image, midpoint, file_no):
     """
@@ -211,12 +218,26 @@ def find_center(image, midpoint, file_no):
 def method_one(prev_cracktip, image, midpoint, file_no):
     center = find_center(image, midpoint, file_no)
     vertical_bounds = [center - round(height/300), center + round(height/300)]
-    horizontal_bounds = [prev_cracktip - round(width/300), prev_cracktip + round(width/30)]
+    horizontal_bounds = [prev_cracktip - round(width/30), prev_cracktip + round(width/30)]
 
     # pretty self-explanatory
     target_area = image[vertical_bounds[0]:vertical_bounds[1], horizontal_bounds[0]:horizontal_bounds[1]]
     tip_column_index = horizontal_bounds[0] + np.argwhere(target_area)[:, 1].max()
     return center, tip_column_index
+
+def method_two(prev_cracktip, image, center, file_no):
+    vertical_bounds = [center - round(height / 300), center + round(height / 300)]
+    horizontal_bounds = [prev_cracktip - round(width / 300), prev_cracktip + round(width / 30)]
+
+    target_area = image[vertical_bounds[0]:vertical_bounds[1], horizontal_bounds[0]:horizontal_bounds[1]]
+    target_ones = np.heaviside(target_area, 0)
+    vconvolved = convolve2d(target_ones, np.ones((3, 1)), mode='valid')
+    vconvolved = np.heaviside(vconvolved, 0)
+    hconvolved = convolve2d(vconvolved, np.ones((1, 6)), mode='valid')
+    hconvolved = np.heaviside(hconvolved-5, 0)
+    tip_column_index = horizontal_bounds[0] + np.argwhere(hconvolved)[:, 1].max() + 5
+    return center, tip_column_index
+
 
 
 def crack_length(type, file_no, width, height, hor_regions, region_minus, region_plus,
@@ -227,7 +248,13 @@ def crack_length(type, file_no, width, height, hor_regions, region_minus, region
     type, file_no, region_fail_file_no, region_vert1, region_vert2, midpoint_fail_file_no (caused by region filtering), target_area_fail_no, target_area_region_hor1, target_area_region2, method2_plus_minus, expansion_size (for checking the contour), acceptable_difference (for checking the method's results), starting_point_check1, starting_point_check2
     """
     time1 = time.time()
-    image, gray, edged = preprocess(type, file_no, width, height)
+    rerun_preprocessing = False
+    if (not contours.joinpath(sample.lower() + '_{}_{}_edge.bmp'.format(type, file_no)).exists()) or rerun_preprocessing:
+        image, gray, edged = preprocess(type, file_no, width, height)
+        print('new image processed')
+    else:
+        image = cv2.imread(str(images.joinpath(sample.lower() + '_{}_{}.bmp'.format(type, file_no))))
+        edged = cv2.imread(str(contours.joinpath(sample.lower() + '_{}_{}_edge.bmp'.format(type, file_no))), cv2.IMREAD_GRAYSCALE)
 
     # Getting rid of useless region by making them all black
 
@@ -244,39 +271,36 @@ def crack_length(type, file_no, width, height, hor_regions, region_minus, region
 
     # crack tip location with method 1
     method_one_fail = False
-    if file_no < 24:
-        crack_pos1 = np.array([center, 464])
+    if file_no < 26:
+        crack_pos1 = np.array([center, 364])
     else:
         try:
-            crack_pos1 = np.array(method_one(cracktips[file_no - 1, 1], edged, midpoint, file_no))
+            crack_pos1 = np.array(method_two(cracktips[file_no - 1, 1], edged, midpoint, file_no))
         except:
             crack_pos1 = cracktips[file_no - 1, :]
             method_one_fail = True
 
     time3 = time.time()
 
-
-    # horizontal starting point determination
-
     # Calculate the crack length in pixels from the position of the ruler
     endpoint = round(fourteencm_point(file_no))
     crack_lengths.append(fourteencm_dist - (endpoint - crack_pos1[1]))
     starting_hor = (endpoint - fourteencm_dist)
+    image_name_edged = sample.lower() + '_{}_{}_edge.bmp'.format(type, file_no)
+    cv2.imwrite(os.path.join(dir_path + '_contours', image_name_edged), edged)
 
     if file_no % 10 == 0:
-        cv2.rectangle(image, [crack_pos1[1], crack_pos1[0]], [crack_pos1[1] + 3, crack_pos1[0] + 3], (0, 0, 255), -1)
-        cv2.rectangle(image, [starting_hor, crack_pos1[0]], [starting_hor + 3, crack_pos1[0] + 3], (0, 0, 255), -1)
+        cv2.line(edged, [0, center], [width, center], (255, 255, 255))
+        cv2.rectangle(edged, [crack_pos1[1], crack_pos1[0]], [crack_pos1[1] + 3, crack_pos1[0] + 3], (0, 0, 255), -1)
+        cv2.rectangle(edged, [starting_hor, crack_pos1[0]], [starting_hor + 3, crack_pos1[0] + 3], (0, 0, 255), -1)
 
         # Drawing the midpoint line on the image with edge detection
-        cv2.line(edged, [0, center], [width, center], (255, 255, 255))
 
         # Saving both the image with the edge detection and the original one but with the contour and two points on it
-        image_name_countour = sample.lower() + '_{}_{}_contour.bmp'.format(type, file_no)
-        image_name_edged = sample.lower() + '_{}_{}_edge.bmp'.format(type, file_no)
-        cv2.imwrite(os.path.join(dir_path+'_contours', image_name_countour), image)
-        cv2.imwrite(os.path.join(dir_path+'_contours', image_name_edged), edged)
+        image_name_midline = sample.lower() + '_{}_{}_midline.bmp'.format(type, file_no)
+        cv2.imwrite(os.path.join(dir_path+'_contours', image_name_midline), edged)
     print('Finished file number: {}'.format(file_no))
-    print(time2 - time1, time3 - time2, file_no)
+    print(time2 - time1, time3 - time2)
     return crack_pos1, method_one_fail
 
 def filter_crack_lengths(crack_lens, files_list):
