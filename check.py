@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-specimen = 'D2'
+specimen = 'C1'
 f = open('results\\MMA_uniform\\{0}\\{0}_crack_lengths.txt'.format(specimen), 'r')
 contents = f.readlines()
 
