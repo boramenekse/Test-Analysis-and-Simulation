@@ -9,56 +9,58 @@ def quadratic_function(x, a, b, c):
     return a * x ** 2 + b * x + c
 
 # Open the files
-with open('A1/MMA B1 C0.txt', 'r') as f:
+with open('A1/MMA B1 C0.txt', 'r') as f, \
+     open('results/MMA_uniform/B1/B1_crack_lengths_all.txt', 'r') as g, \
+     open('results/MMA_uniform/B1/B1_filtered_files.txt', 'r') as h:
+    
     contents = f.readlines()
-
-with open('results/MMA_uniform/B1/B1_crack_lengths.txt', 'r') as g:
     cracklengths = g.readlines()
+    missing_indices = h.readlines()
+
+missing_indices = [np.int(float(x)) if isinstance(x, str) else np.int(x) for x in missing_indices]
+normalized_indices = [(x - np.min(missing_indices)) for x in missing_indices]
 
 # Extract crack lengths
 second_line = cracklengths[1].strip()
-entries = [round(float(x), 4) for x in second_line.split()]
+entries = [np.round(np.float(x), 4) for x in second_line.split()]
 
 # Convert first line to a list of index integers
 first_line = cracklengths[0].strip()
-indices = [int(float(x)) if isinstance(x, str) else int(x) for x in first_line.split()]
+indices = [np.int(float(x)) if isinstance(x, str) else np.int(x) for x in first_line.split()]
 
 # Find which integers are not used in indices list
-missing_indices = [i for i in range(min(indices), max(indices) + 1) if i not in indices]
-print("Missing indices:", missing_indices)
+missing_indices = [i for i in range(np.min(indices), np.max(indices)) if i not in indices]
 
 # Normalize missing indices
-normalized_indices = [(x - min(indices)) for x in missing_indices]
-n_indices = [(x - min(indices)) for x in indices]
+normalized_indices = [(x - np.min(missing_indices)) for x in missing_indices]
 
-counted_list = Counter(n_indices)
+counted_list = Counter(indices)
 repeating = [number for number, count in counted_list.items() if count > 1]
-print("Repeating entries:", repeating)
+repeating.sort(reverse=True)
 
 # Remove the entries from txt file that are not used
 for i in repeating:
-    entries.pop(i)
+    entries.pop(i - np.min(indices))
 
 # Extract force and displacement data
-force = []
-displacement = []
-
-for line in contents[:]:
-    cols = line.split('\t')
-    force.append(float(cols[2].replace(',', '.')) * 40)
-    displacement.append(float(cols[3].replace(',', '.')) * 0.02)
+force = [np.float(line.split('\t')[2].replace(',', '.')) * 40 for line in contents]
+displacement = [np.float(line.split('\t')[3].replace(',', '.')) * 0.02 for line in contents]
 
 # Remove corresponding entries in force and displacement
-normalized_indices.sort(reverse=True)
 for i in normalized_indices:
-    del displacement[i]
-    del force[i]
+    displacement.pop(i)
+    force.pop(i)
 
 # Calculate compliance
 width = 0.025
-displacement1 =  [(x - min(displacement)) for x in displacement]
+compliance = [d / f for d, f in zip(displacement, force)]
 
-compliance = [d / f for d, f in zip(displacement1, force)]
+def derivative(point1, point2):
+    #point1: [x1, y1]
+    x1, y1 = point1
+    x2, y2 = point2
+    value = (y2-y1)/(x2-x1)
+    return value
 
 # Perform linear regression
 reg = LinearRegression()
@@ -72,19 +74,27 @@ print("Linear regression coefficients:", reg.coef_)
 popt, pcov = curve_fit(quadratic_function, entries, compliance)
 a, b, c = popt
 print("Quadratic regression coefficients:", a, b, c)
-
+print('force', force)
 # Calculate dc/da
 gradient = reg.coef_
 gradient2 = [2 * a * x + b for x in entries]
 
 # Calculate energy release rate 
 err = []
-for i in range(len(force)):
-    errx = 1 / 2 * force[i] ** 2 / width * gradient2[i] / 1000 # Convert J to kJ
+for i in range(len(force)-1):
+    #gradient = derivative([compliance[i], compliance[i+1]], [entries[i], entries[i+1]])
+    errx =  1 / 2 * force[i] ** 2 / width * gradient2[i] / 1000 # Convert J to kJ
     err.append(errx)
 
+first_index = 0 
+for i in range(len(entries)):
+        if entries[i] >= 0.03:
+             first_index = i
+             break 
+print(err)
 # Plot data
 plt.figure()
-plt.plot(entries, err)
-plt.xlim(0, np.max(entries)+0.01)
+plt.plot(entries[first_index:-1], err[first_index:])
+plt.xlim(-0.02, np.max(entries)+0.01)
+plt.ylim(0, 4.5)
 plt.show()
