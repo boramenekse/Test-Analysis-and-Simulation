@@ -55,6 +55,13 @@ for i in normalized_indices:
 width = 0.025
 compliance = [d / f for d, f in zip(displacement, force)]
 
+def derivative(point1, point2):
+    #point1: [x1, y1]
+    x1, y1 = point1
+    x2, y2 = point2
+    value = (y2-y1)/(x2-x1)
+    return value
+
 # Perform linear regression
 reg = LinearRegression()
 X = np.array(entries).reshape(-1, 1)
@@ -74,13 +81,20 @@ gradient2 = [2 * a * x + b for x in entries]
 
 # Calculate energy release rate 
 err = []
-for i in range(len(force)):
-    errx =  1 / 2 * force[i] ** 2 / width * gradient / 1000 # Convert J to kJ
+for i in range(len(force)-1):
+    #gradient = derivative([compliance[i], compliance[i+1]], [entries[i], entries[i+1]])
+    errx =  1 / 2 * force[i] ** 2 / width * gradient2[i] / 1000 # Convert J to kJ
     err.append(errx)
 
+first_index = 0 
+for i in range(len(entries)):
+        if entries[i] >= 0.03:
+             first_index = i
+             break 
 print(err)
 # Plot data
 plt.figure()
-plt.plot(entries, err)
+plt.plot(entries[first_index:-1], err[first_index:])
 plt.xlim(-0.02, np.max(entries)+0.01)
+plt.ylim(0, 4.5)
 plt.show()
