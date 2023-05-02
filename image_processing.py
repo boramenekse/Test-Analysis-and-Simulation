@@ -6,7 +6,8 @@ from natsort import natsorted
 import time
 import pathlib
 from lengths import print_result
-
+from scipy.signal import convolve2d
+import shutil
 start_time = time.time()
 
 '''
@@ -14,28 +15,31 @@ What happens in this file rn:
 -unformize all the names
 -realize the folders
 -grayscale the images
--
+-ect...
 '''
 
 '''
-What to change: 
+    What to change: 
 - sample name
-- dcb starting point
-- 14cm point travel
+- 14cm point travel in line 116
 - top side of the sample to remove in remove_regions
 - bottom side of the sample to remove in remove_regions
 - crack position relative to the midpoint in method_one
 - starting file number in line 234
 - starting crack position in line 235
+- adjust image type if needed
 '''
 manual_crack_lengths = print_result()
 
 p = pathlib.Path(__file__)
-sample = 'A4'  # sample name
+sample = input('which sample')  # sample name
 source = p.parents[0]
 images = p.joinpath(source, sample)
 contours = p.joinpath(source, sample + '_contours')
 dir_path = str(images)
+results = p.joinpath(source, 'results', 'MMA_pattern', sample)
+if not results.exists():
+    results.mkdir()
 if not contours.exists():
     contours.mkdir()
 
@@ -104,22 +108,19 @@ fail2_fail_no = []
 crack_lengths = []
 cracktips = np.empty((0, 2), dtype=int)
 hor_start = []
-
+rerun_preprocessing = True
 
 width = 2048
 height = 2048
-hor_region = [200, 250] # start and end column of the midpoint search region in a 2048x2048 image
-region_minus = 10
-region_plus = 10
+hor_region = [150, 235]  # start and end column of the midpoint search region in a 2048x2048 image
 expansion_size = 5
 acceptable_max_difference = 5
 starting_hor_region1 = 0.08 # for checking if the correct horizontal starting position is found
 starting_hor_region2 = 0.11
-dcb_starting_point = [210, 70]
-fourteencm_point_travel = [1977, 1889]
-fourteencm_dist = 1528
+fourteencm_point_travel = [1890, 1717]
+fourteencm_dist = fourteencm_point_travel[0] - 423
 
-point_one_cm = fourteencm_dist/14 # [pixels]
+point_one_cm = fourteencm_dist/140 # [pixels]
 one_cm = point_one_cm * 10 # [pixels]
 one_pixel = 1 / one_cm # [cm]
 one_pixel_m = one_pixel/100 # [m]
@@ -136,13 +137,13 @@ def remove_regions(image_no, image :np.array([])):
     '''
     height, width = image.shape
     # region 1
-    image[:round(height*0.065), :] = 0
+    image[:round(height*0/2048), :] = 0
 
     # region2
-    P0_0 = [300, 0]
-    P1_0 = [280, 1110]
-    P0_1 = [940, 0]
-    P1_1 = [623, 1295]
+    P0_0 = [500, 0]
+    P1_0 = [500, 1200]
+    P0_1 = [1200, 0]
+    P1_1 = [950, 1200]
 
     # formula: starting point + (ending point - starting point) * progress
     progress = image_no / total_files_no
@@ -165,11 +166,11 @@ def preprocess(type, file_no, width, height):
     # Grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray = remove_regions(file_no, gray)  # remove the regions that are not needed for the analysis
-    gray = cv2.fastNlMeansDenoising(gray, None, 20, 7, 21)  # removing noise
-    gray = cv2.GaussianBlur(gray, (3, 3), 0)  # makes the image blur
+    # gray = cv2.fastNlMeansDenoising(gray, None, 20, 7, 21)  # removing noise
+    gray = cv2.GaussianBlur(gray, (1, 5), 5)  # makes the image blur
 
     # Find Canny edges
-    edged = cv2.Canny(gray, 60, 100)  # edge detection
+    edged = cv2.Canny(gray, 50, 200)  # edge detection
 
     return image, gray, edged
 
@@ -184,17 +185,31 @@ def find_midpoint(x, width, fraction1, fraction2):
     """
     data = x[:, int(fraction1 * width):int(fraction2 * width)]
     rows, columns = data.shape
+    # iteration one: find a preliminary midpoint
     midpoints = []
     for i in range(columns):
         row_indices = np.where(data[:, i] == 255)[0]
-        end_of_first = row_indices[1]
-        start_of_second = row_indices[2]
+        if np.size(row_indices) >= 3:
+            end_of_first = row_indices[1]
+            start_of_second = row_indices[2]
+        else:
+            continue
         if (start_of_second - end_of_first - 1) % 2 != 0:
             midpoints.append(end_of_first + (start_of_second - end_of_first) / 2)
         else:
             midpoints.append(end_of_first + (start_of_second - end_of_first - 1) / 2)
-    mean_value = round(np.mean(np.array(midpoints)))
-    return mean_value
+    values, counts = np.unique(midpoints, return_counts=True)
+    max_count = max(counts.tolist())
+    most_frequent_value = int(values.tolist()[counts.tolist().index(max_count)])
+
+    # iteration two: find the midpoint
+    midpoints = []
+    for i in range(columns):
+        whites = np.argwhere(data[:, i])[:, 0]
+        midpoint_index = np.searchsorted(whites, most_frequent_value)
+        if 0<midpoint_index<len(whites):
+            midpoints.append((whites[midpoint_index-1] + whites[midpoint_index])/2)
+    return np.average(midpoints)
 
 
 def find_center(image, midpoint, file_no):
@@ -203,15 +218,16 @@ def find_center(image, midpoint, file_no):
     image: (array) the data of the image that the edge detection is used on, should only consist of 0 and 255.
     midpoint: (int) the vertical position of the midpoint of the structure, which is on the line that the crack propagates through. Therefore, it actually calculates the vertical position of the ending point of the crack.
     """
-    lean = midpoint - np.nonzero(image[:, -1])[0][0] - 22  # for the dcb not being straight
-    center = round(midpoint - 5 - (0.6*(file_no/total_files_no) + 0.0) * lean)  # calculate the expected vertical position of the cracktip
+    height_dcb = 22  # half height of the adhesive layer, added or substracted depending on whether the crack is on the top or bottom of the structure
+    lean = midpoint - np.nonzero(image[:, -1])[0][0] - height_dcb  # for the dcb not being straight
+    center = round(midpoint - (0.6 * (file_no/total_files_no) + 0.2) * lean)  # calculate the expected vertical position of the cracktip
     return center
 
 
 def method_one(prev_cracktip, image, midpoint, file_no):
     center = find_center(image, midpoint, file_no)
-    vertical_bounds = [center - round(height/300), center + round(height/300)]
-    horizontal_bounds = [prev_cracktip - round(width/300), prev_cracktip + round(width/30)]
+    vertical_bounds = [center - round(height/250), center + round(height/250)]
+    horizontal_bounds = [prev_cracktip - round(width/30), prev_cracktip + round(width/30)]
 
     # pretty self-explanatory
     target_area = image[vertical_bounds[0]:vertical_bounds[1], horizontal_bounds[0]:horizontal_bounds[1]]
@@ -219,15 +235,51 @@ def method_one(prev_cracktip, image, midpoint, file_no):
     return center, tip_column_index
 
 
-def crack_length(type, file_no, width, height, hor_regions, region_minus, region_plus,
-                 expansion_size, acceptable_max_difference, starting_hor_region1,
-                 starting_hor_region2, dcb_starting_point: [int, int]):
+def method_two(prev_cracktip, image, center, conditionregion=[3, 7]):
     """
-    parameters the function needs:
-    type, file_no, region_fail_file_no, region_vert1, region_vert2, midpoint_fail_file_no (caused by region filtering), target_area_fail_no, target_area_region_hor1, target_area_region2, method2_plus_minus, expansion_size (for checking the contour), acceptable_difference (for checking the method's results), starting_point_check1, starting_point_check2
+    Find the horizontal position of the cracktip, in a region around [center, prev_cracktip]
+    The condition is to have at least one white pixel in each column in a region defined by conditionregion
+    This ingores the millimetre markings on the ruler, as they are only 5 pixel wide
     """
+    # target area bounds
+    vertical_bounds = [center - round(height / 250), center + round(height / 250)]
+    horizontal_bounds = [prev_cracktip - round(width / 100), prev_cracktip + round(width / 50)]
+
+    # target area normalization
+    target_area = image[vertical_bounds[0]:vertical_bounds[1], horizontal_bounds[0]:horizontal_bounds[1]]
+    target_ones = np.heaviside(target_area, 0)
+
+    # get the whether a vertical region has a white pixel
+    vconvolved = convolve2d(target_ones, np.ones((conditionregion[0], 1)), mode='valid')
+    vconvolved = np.heaviside(vconvolved, 0)
+
+    # detect whether all pixels in a horizonatal region are white
+    hconvolved = convolve2d(vconvolved, np.ones((1, conditionregion[1])), mode='valid')
+    hconvolved = np.heaviside(hconvolved - conditionregion[1] + 1, 0)
+
+    # get the index of the rightmost region that satisfies the condition
+    tip_column_index = horizontal_bounds[0] + np.argwhere(hconvolved)[:, 1].max() + conditionregion[1] - 1
+    return center, tip_column_index
+
+
+def crack_length(type, file_no, width, height, hor_regions):
+    """
+    Calculate the crack lenght, and the crack tip positon heavily dependent on the edge recogtion quiality
+    paratmeters:
+    type: (int) 0 or 1
+    file_no: (int) the number of the image file
+    width: (int) the width of the image
+    height: (int) the height of the image
+    hor_regions: (list) the horizontal region in which the dcb midpoint should lie
+    """
+
     time1 = time.time()
-    image, gray, edged = preprocess(type, file_no, width, height)
+    if (not contours.joinpath(sample.lower() + '_{}_{}_edge.bmp'.format(type, file_no)).exists()) or rerun_preprocessing:
+        image, gray, edged = preprocess(type, file_no, width, height)
+        print('new image processed')
+    else:
+        image = cv2.imread(str(images.joinpath(sample.lower() + '_{}_{}.bmp'.format(type, file_no))))
+        edged = cv2.imread(str(contours.joinpath(sample.lower() + '_{}_{}_edge.bmp'.format(type, file_no))), cv2.IMREAD_GRAYSCALE)
 
     # Getting rid of useless region by making them all black
 
@@ -241,43 +293,48 @@ def crack_length(type, file_no, width, height, hor_regions, region_minus, region
     # Find the midpoint of the crack
     midpoint = find_midpoint(edged, width, hor_regions[0], hor_regions[1])
     center = find_center(edged, midpoint, file_no)
-
+    if file_no == 45:
+        pass
     # crack tip location with method 1
     method_one_fail = False
-    if file_no < 24:
-        crack_pos1 = np.array([center, 464])
+    if file_no < 14:
+        crack_pos1 = np.array([center, 410])
     else:
         try:
-            crack_pos1 = np.array(method_one(cracktips[file_no - 1, 1], edged, midpoint, file_no))
+            crack_pos1 = np.array(method_two(cracktips[file_no - 1, 1], edged, center, [3, 8]))
         except:
             crack_pos1 = cracktips[file_no - 1, :]
             method_one_fail = True
 
     time3 = time.time()
 
-
-    # horizontal starting point determination
-
     # Calculate the crack length in pixels from the position of the ruler
     endpoint = round(fourteencm_point(file_no))
     crack_lengths.append(fourteencm_dist - (endpoint - crack_pos1[1]))
     starting_hor = (endpoint - fourteencm_dist)
+    image_name_edged = sample.lower() + '_{}_{}_edge.bmp'.format(type, file_no)
+    cv2.imwrite(os.path.join(dir_path + '_contours', image_name_edged), edged)
 
-    if file_no % 10 == 0:
-        cv2.rectangle(image, [crack_pos1[1], crack_pos1[0]], [crack_pos1[1] + 3, crack_pos1[0] + 3], (0, 0, 255), -1)
-        cv2.rectangle(image, [starting_hor, crack_pos1[0]], [starting_hor + 3, crack_pos1[0] + 3], (0, 0, 255), -1)
+    if 40<file_no<50:
+        cv2.line(edged, [0, center], [width, center], (255, 255, 255))
+        cv2.rectangle(edged, [crack_pos1[1], crack_pos1[0]], [crack_pos1[1] + 3, crack_pos1[0] + 3], (0, 0, 255), -1)
+        cv2.rectangle(edged, [starting_hor, crack_pos1[0]], [starting_hor + 3, crack_pos1[0] + 3], (0, 0, 255), -1)
 
         # Drawing the midpoint line on the image with edge detection
-        cv2.line(edged, [0, center], [width, center], (255, 255, 255))
 
         # Saving both the image with the edge detection and the original one but with the contour and two points on it
-        image_name_countour = sample.lower() + '_{}_{}_contour.bmp'.format(type, file_no)
-        image_name_edged = sample.lower() + '_{}_{}_edge.bmp'.format(type, file_no)
-        cv2.imwrite(os.path.join(dir_path+'_contours', image_name_countour), image)
-        cv2.imwrite(os.path.join(dir_path+'_contours', image_name_edged), edged)
+        image_name_midline = sample.lower() + '_{}_{}_midline.bmp'.format(type, file_no)
+        cv2.imwrite(os.path.join(dir_path+'_contours', image_name_midline), edged)
+    if 40<file_no<50:
+        cv2.rectangle(image, [crack_pos1[1], crack_pos1[0]], [crack_pos1[1] + 3, crack_pos1[0] + 3], (0, 0, 255), -1)
+        cv2.rectangle(image, [starting_hor, crack_pos1[0]], [starting_hor + 3, crack_pos1[0] + 3], (0, 0, 255), -1)
+        image_name_cracktip = sample.lower() + '_{}_{}_cracktip.bmp'.format(type, file_no)
+        cv2.imwrite(os.path.join(dir_path+'_contours', image_name_cracktip), image)
+
     print('Finished file number: {}'.format(file_no))
-    print(time2 - time1, time3 - time2, file_no)
+    print(time2 - time1, time3 - time2)
     return crack_pos1, method_one_fail
+
 
 def filter_crack_lengths(crack_lens, files_list):
     prev_len = crack_lens[0]
@@ -302,13 +359,9 @@ files_list = []
 failures =[]
 
 for j in files:
-    crack_pos, failure= crack_length(0, j, width, height, hor_region,
-                 region_minus, region_plus,
-                 expansion_size, acceptable_max_difference,
-                 starting_hor_region1,
-                 starting_hor_region2, dcb_starting_point)
+    crack_pos, failure= crack_length(0 , j, width, height, hor_region)
     cracktips = np.vstack((cracktips, crack_pos.T))
-    if failure == True:
+    if failure == False:
         failures.append(j)
     total += 1
     files_list.append(j)
@@ -347,18 +400,7 @@ print('The following files failed in both methods: ', failures)
 
 crack_lengths = (np.array(crack_lengths) * one_pixel_m).tolist()
 
-all_files_critical = np.array(wrong_start_file_no)
-''' + fail1_fail_no + no_success_file_no'''
-unique_list_critical = np.unique(all_files_critical, return_counts=True)
-file_indices_critical = unique_list_critical[0].tolist()
 
-crack_lengths_reduced = []
-files_list_reduced = []
-files_list_len = len(files_list)
-for i in range(files_list_len):
-    if not (i in file_indices_critical):
-        files_list_reduced.append(i)
-        crack_lengths_reduced.append(crack_lengths[i])
 
 plt.figure()
 plt.plot(files_list, crack_lengths, marker='.', markerfacecolor='red', markersize=7)
@@ -367,14 +409,24 @@ plt.xlabel('File No')
 plt.ylabel('Crack length [m]')
 plt.title('Crack length variation over files')
 plt.grid()
-plt.savefig(sample + '\\Crack_length_in_each_file.png', dpi=300)
-cv2.destroyAllWindows()
+plt.savefig(str(results) + '\\Crack_length_in_each_file.png', dpi=300)
+plt.savefig(str(images) + '\\Crack_length_in_each_file.png', dpi=300)
 
 #filter the crack lenghts and save them
 filtered = filter_crack_lengths(crack_lengths, files_list)
 crack_len_file = np.vstack((files_list, filtered))
+np.savetxt(str(results.joinpath(sample + '_crack_lengths_filtered.txt')), crack_len_file)
+np.savetxt(str(results.joinpath(sample + '_crack_lengths.txt')), np.vstack((files_list, filtered)).T)
 
-np.savetxt((sample+'_crack_lengths_filtered.txt'), crack_len_file)
-np.savetxt((sample+'_crack_lengths.txt'), np.vstack((files_list, filtered)).T)
+c_0_original = images.joinpath('c_0.txt')
+c_1_original = images.joinpath('c_1.txt')
+c_0_new = results.joinpath('c_0.txt')
+c_1_new = results.joinpath('c_1.txt')
+shutil.copy(c_0_original, c_0_new)
+shutil.copy(c_1_original, c_1_new)
+
 end_time = time.time()
 print('Execution time of the program: ', end_time - start_time, '[s]')
+cv2.destroyAllWindows()
+plt.close('all')
+quit()
