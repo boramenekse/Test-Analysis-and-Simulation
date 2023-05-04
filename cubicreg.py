@@ -5,8 +5,8 @@ from collections import Counter
 from scipy.optimize import curve_fit
 
 # Define the quadratic function
-def quadratic_function(x, a, b, c):
-    return a * x ** 2 + b * x + c
+def cubic_function(x, a, b, c, d):
+    return a * x ** 3 + b * x ** 2 + c * x + d
 
 # Open the files
 with open('A1/MMA B1 C0.txt', 'r') as f, \
@@ -16,7 +16,10 @@ with open('A1/MMA B1 C0.txt', 'r') as f, \
     contents = f.readlines()
     cracklengths = g.readlines()
     missing_indices = h.readlines()
-    
+
+missing_indices = [np.int(float(x)) if isinstance(x, str) else np.int(x) for x in missing_indices]
+normalized_indices = [(x - np.min(missing_indices)) for x in missing_indices]
+
 # Extract crack lengths
 second_line = cracklengths[1].strip()
 entries = [np.round(np.float(x), 4) for x in second_line.split()]
@@ -68,13 +71,13 @@ c_pred = reg.predict(X)
 print("Linear regression coefficients:", reg.coef_)
 
 # Perform quadratic regression
-popt, pcov = curve_fit(quadratic_function, entries, compliance)
-a, b, c = popt
-print("Quadratic regression coefficients:", a, b, c)
+popt, pcov = curve_fit(cubic_function, entries, compliance)
+a, b, c, d  = popt
+print("Quadratic regression coefficients:", a, b, c, d )
 print('force', force)
 # Calculate dc/da
 gradient = reg.coef_
-gradient2 = [2 * a * x + b for x in entries]
+gradient2 = [3 * a * x **2 + 2 * b * x + c for x in entries]
 
 # Calculate energy release rate 
 err = []
