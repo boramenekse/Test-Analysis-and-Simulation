@@ -4,6 +4,7 @@ from sklearn.linear_model import LinearRegression
 from collections import Counter
 from scipy.optimize import curve_fit
 import pathlib
+from numpy.polynomial.polynomial import Polynomial as P
 
 # Define the quadratic function
 def cubic_function(x, a, b, c, d):
@@ -18,8 +19,8 @@ def read_cracklengths(sample, folder):
     if filtered_files_loc.exists():
         # Open the files
         with open('A1/MMA B1 C0.txt', 'r') as f, \
-             open('results/MMA_uniform/B1/B1_crack_lengths_all.txt', 'r') as g, \
-             open('results/MMA_uniform/B1/B1_filtered_files.txt', 'r') as h:
+             open(folder.joinpath(f'{sample}_crack_lengths_all.txt'), 'r') as g, \
+             open(folder.joinpath(f'{sample}_filtered_files.txt'), 'r') as h:
 
             contents = f.readlines()
             cracklengths = g.readlines()
@@ -67,8 +68,13 @@ def calc_err(entries, force, displacement):
     # Calculate compliance
     width = 0.025
     compliance = [d / f for d, f in zip(displacement, force)]
-
-
+    comp = np.array(compliance)
+    entr = np.array(entries)
+    entr = entr + 0.025
+    fig, ax = plt.subplots()
+    plt.title('Compliance vs crack length')
+    ax.plot(entr, np.power(comp, 1/3))
+    plt.show()
     # Perform linear regression
     reg = LinearRegression()
     X = np.array(entries).reshape(-1, 1)
@@ -77,7 +83,7 @@ def calc_err(entries, force, displacement):
     c_pred = reg.predict(X)
     print("Linear regression coefficients:", reg.coef_)
 
-    # Perform quadratic regression
+    # Perform cubic regression
     popt, pcov = curve_fit(cubic_function, entries, compliance)
     a, b, c, d  = popt
     print("Quadratic regression coefficients:", a, b, c, d )
@@ -100,6 +106,20 @@ def calc_err(entries, force, displacement):
                  break
     return err, first_index
 
+def calc_err_v2(entries, force, displacement):
+    width = 0.025
+    compliance = [d / f for d, f in zip(displacement, force)]
+    comp = np.array(compliance)
+    entr = np.array(entries)
+    forc = np.array(force)
+    disp = np.array(displacement)
+    # Perform linear regression
+    fitted_linear = P.fit(entr[10:], np.power(comp[10:], 1 / 3), 1)
+    delta = np.abs(fitted_linear.roots())
+    err = 3 * forc * disp / 2 / width / (entr + delta)
+    #plt.plot(entr, np.power(comp, 1 / 3))
+    #plt.plot(entr, fitted_linear(entr))
+    return err, 1
 def do_the_stuff():
     for surf_treatment_dir in results.iterdir():
         for sample_dir in surf_treatment_dir.iterdir():
@@ -107,6 +127,9 @@ def do_the_stuff():
             surf_treatment = surf_treatment_dir.stem
 
             entries, forces, displacements = read_cracklengths(sample_name, sample_dir)
+            entr = np.array(entries)
+            entr = entr + 0.0
+            entries = entr.tolist()
             err, first_index = calc_err(entries, forces, displacements)
             np.savetxt(sample_dir.joinpath(f'{sample_name}_err.txt'), err)
             fig, ax = plt.subplots()
@@ -121,13 +144,14 @@ if __name__ == "__main__":
         sample_dir = results.joinpath(surf_treatment, sample_name)
 
         entries, forces, displacements = read_cracklengths(sample_name, sample_dir)
-        err, first_index = calc_err(entries, forces, displacements)
+        err, first_index = calc_err_v2(entries, forces, displacements)
 
         # Plot data
         plt.figure()
-        plt.plot(entries[first_index:-1], err[first_index:])
-        plt.xlim(-0.02, np.max(entries)+0.01)
-        plt.ylim(0, 4.5)
+        plt.plot(entries[first_index:], err[first_index:])
+        #plt.xlim(-0.02, np.max(entries)+0.01)
+        #plt.ylim(0, 4.5)
         plt.show()
     else:
         do_the_stuff()
+
