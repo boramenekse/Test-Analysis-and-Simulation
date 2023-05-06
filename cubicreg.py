@@ -5,7 +5,7 @@ from collections import Counter
 from scipy.optimize import curve_fit
 import pathlib
 from numpy.polynomial.polynomial import Polynomial as P
-
+from scipy.signal import savgol_filter
 # Define the quadratic function
 def cubic_function(x, a, b, c, d):
     return a * x ** 3 + b * x ** 2 + c * x + d
@@ -104,9 +104,10 @@ def calc_err(entries, force, displacement):
             if entries[i] >= 0.02:
                  first_index = i
                  break
-    return err, first_index
+    return err
 
-def calc_err_v2(entries, force, displacement):
+def MBT_method(entries, force, displacement):
+    """modified beam theory method for calculating Energy release rate"""
     width = 0.025
     compliance = [d / f for d, f in zip(displacement, force)]
     comp = np.array(compliance)
@@ -116,10 +117,43 @@ def calc_err_v2(entries, force, displacement):
     # Perform linear regression
     fitted_linear = P.fit(entr[10:], np.power(comp[10:], 1 / 3), 1)
     delta = np.abs(fitted_linear.roots())
-    err = 3 * forc * disp / 2 / width / (entr + delta)
-    #plt.plot(entr, np.power(comp, 1 / 3))
-    #plt.plot(entr, fitted_linear(entr))
-    return err, 1
+    err = 3 * forc * disp / 2 / width / (entr + delta) / 1000
+    plt.plot(entr[10:], np.power(comp[10:], 1 / 3))
+    plt.plot(entr, fitted_linear(entr))
+    return err
+
+def CC_method(entries, force, displacement):
+    """Compliance calibration method for calculating Energy release rate"""
+    if not type(entries) == np.ndarray:
+        entries = np.array(entries)
+        force = np.array(force)
+        displacement = np.array(displacement)
+
+    width = 0.025
+
+    log_comp = np.log(displacement / force)
+    plt.plot(np.log(entr[10:]), log_comp[10:])
+    plt.show()
+    fitted_linear = P.fit(np.log(entr[10:]), log_comp[10:], 1)
+    n = fitted_linear.coef[1]
+    err = n * force * displacement / 2 / width / entries / 1000
+    return err
+
+def MCC_method(entries, force, displacement):
+    """Modified compliance calibration method for calculating Energy release rate"""
+    if not type(entries) == np.ndarray:
+        entries = np.array(entries)
+        force = np.array(force)
+        displacement = np.array(displacement)
+
+    width = 0.025
+    h = 0.004
+    compliance = displacement / force
+    fitted_linear = P.fit(np.power(compliance, 1 / 3)[10:], (entries / h) [10:], 1)
+    A_1 = fitted_linear.coef[1]
+
+    err = 3 * (force ** 2) * np.power(compliance, 2 / 3) / 2 / width / A_1 / h / 1000
+    return err
 def do_the_stuff():
     for surf_treatment_dir in results.iterdir():
         for sample_dir in surf_treatment_dir.iterdir():
@@ -144,14 +178,20 @@ if __name__ == "__main__":
         sample_dir = results.joinpath(surf_treatment, sample_name)
 
         entries, forces, displacements = read_cracklengths(sample_name, sample_dir)
-        err, first_index = calc_err_v2(entries, forces, displacements)
-
+        entr = np.array(entries)
+        entr = entr + 0.025
+        # entr = savgol_filter(entr, 5, 3)
+        entries = entr.tolist()
+        err = MCC_method(entries, forces, displacements)
+        first_index = np.searchsorted(entries, 0.035)
         # Plot data
         plt.figure()
         plt.plot(entries[first_index:], err[first_index:])
         #plt.xlim(-0.02, np.max(entries)+0.01)
         #plt.ylim(0, 4.5)
         plt.show()
+        print(entries[-1])
     else:
         do_the_stuff()
 
+quit()
