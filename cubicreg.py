@@ -16,14 +16,20 @@ results = root.joinpath('results')
 
 def read_cracklengths(sample, folder):
     filtered_files_loc = folder.joinpath(f'{sample}_filtered_files.txt')
+    c_1 = False
+    if sample in ['B4', 'SBP1', 'SBP2']:
+        c_1 = True
     if filtered_files_loc.exists():
         # Open the files
-        with open('A1/MMA B1 C0.txt', 'r') as f, \
-             open(folder.joinpath(f'{sample}_crack_lengths_all.txt'), 'r') as g, \
-             open(folder.joinpath(f'{sample}_filtered_files.txt'), 'r') as h:
+        if c_1:
+            with open(folder.joinpath('c_1.txt'), 'r') as f:
+                contents = f.readlines()
+        else:
+            with open(folder.joinpath('c_0.txt'), 'r') as f:
+                contents = f.readlines()
 
-            contents = f.readlines()
-            cracklengths = g.readlines()
+        with open(folder.joinpath(f'{sample}_crack_lengths_all.txt'), 'r') as g:
+             cracklengths = g.readlines()
         # Extract crack lengths
         second_line = cracklengths[1].strip()
         entries = [round(float(x), 4) for x in second_line.split()]
@@ -56,10 +62,12 @@ def read_cracklengths(sample, folder):
             force.pop(i)
     else:
         entries = np.loadtxt(folder.joinpath(f'{sample}_crack_lengths.txt')).T[1, :].tolist()
-        """!!!!!!!!!!!!!!!CHECK IF c_0 OR c_1!!!!!!!!!!!!!!!!!!!!!!"""
-        with open(folder.joinpath('c_0.txt'), 'r') as f:
-            contents = f.readlines()
-
+        if c_1:
+            with open(folder.joinpath('c_1.txt'), 'r') as f:
+                contents = f.readlines()
+        else:
+            with open(folder.joinpath('c_0.txt'), 'r') as f:
+                contents = f.readlines()
         force = [float(line.split('\t')[2].replace(',', '.')) * 40 for line in contents]
         displacement = [float(line.split('\t')[3].replace(',', '.')) * 0.02 for line in contents]
     return entries, force, displacement
