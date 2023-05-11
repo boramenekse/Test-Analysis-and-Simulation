@@ -5,8 +5,8 @@ from collections import Counter
 from scipy.optimize import curve_fit
 
 # Define the quadratic function
-def quadratic_function(x, a, b, c, d):
-    return a * x ** 3 + b * x**2 + c*x + d
+def quadratic_function(x, a, b, c):
+    return a * x ** 2 + b * x + c
 
 # Open the files
 with open('A1/MMA B1 C0.txt', 'r') as f, \

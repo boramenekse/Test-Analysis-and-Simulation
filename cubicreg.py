@@ -6,13 +6,14 @@ from scipy.optimize import curve_fit
 import pathlib
 from numpy.polynomial.polynomial import Polynomial as P
 from scipy.signal import savgol_filter
+from lists import width_values
 # Define the quadratic function
 def cubic_function(x, a, b, c, d):
     return a * x ** 3 + b * x ** 2 + c * x + d
 
 root = pathlib.Path.cwd()
 results = root.joinpath('results')
-
+widths = width_values()
 
 def read_cracklengths(sample, folder):
     filtered_files_loc = folder.joinpath(f'{sample}_filtered_files.txt')
@@ -24,13 +25,6 @@ def read_cracklengths(sample, folder):
 
     if filtered_files_loc.exists():
         # Open the files
-        if c_1:
-            with open(folder.joinpath('c_1.txt'), 'r') as f:
-                contents = f.readlines()
-        else:
-            with open(folder.joinpath('c_0.txt'), 'r') as f:
-                contents = f.readlines()
-
         with open(folder.joinpath(f'{sample}_crack_lengths_all.txt'), 'r') as g:
              cracklengths_all = g.readlines()
 
@@ -54,8 +48,7 @@ def read_cracklengths(sample, folder):
                 missing_indices.append(index)
 
         # Normalize missing indices
-        normalized_indices = [(x - np.min(missing_indices)) for x in missing_indices]
-
+        normalized_indices = [(x - np.min(indices)) for x in missing_indices]
     else:
         entries = np.loadtxt(folder.joinpath(f'{sample}_crack_lengths.txt')).T[1, :].tolist()
         if c_1:
@@ -64,9 +57,15 @@ def read_cracklengths(sample, folder):
         else:
             with open(folder.joinpath('c_0.txt'), 'r') as f:
                 contents = f.readlines()
+
+    if c_1:
+        with open(folder.joinpath('c_1.txt'), 'r') as f:
+            contents = f.readlines()
+    else:
+        with open(folder.joinpath('c_0.txt'), 'r') as f:
+            contents = f.readlines()
     force = [float(line.split('\t')[2].replace(',', '.')) * 40 for line in contents]
     displacement = [float(line.split('\t')[3].replace(',', '.')) * 0.02 for line in contents]
-
     # Remove corresponding entries in force and displacement
     for i in normalized_indices:
         displacement.pop(i)
@@ -220,4 +219,6 @@ if __name__ == "__main__":
         print(entries[-1])
     else:
         do_the_stuff()
+
+#PP2, 1DS2, 1DS3, 2DS4, 2DS5
 
