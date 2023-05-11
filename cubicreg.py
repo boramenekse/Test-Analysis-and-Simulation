@@ -14,6 +14,8 @@ def cubic_function(x, a, b, c, d):
 root = pathlib.Path.cwd()
 results = root.joinpath('results')
 widths = width_values()
+plots = root.joinpath('plots')
+plots.mkdir(exist_ok=True)
 
 def read_cracklengths(sample, folder):
     filtered_files_loc = folder.joinpath(f'{sample}_filtered_files.txt')
@@ -67,7 +69,7 @@ def read_cracklengths(sample, folder):
     force = [float(line.split('\t')[2].replace(',', '.')) * 40 for line in contents]
     displacement = [float(line.split('\t')[3].replace(',', '.')) * 0.02 for line in contents]
     # Remove corresponding entries in force and displacement
-    for i in normalized_indices:
+    for i in normalized_indices[::-1]:
         displacement.pop(i)
         force.pop(i)
 
@@ -126,21 +128,23 @@ def MBT_method(entries, force, displacement, sample='undefined'):
     # Perform linear regression
     fitted_linear = P.fit(entr[10:], np.power(comp[10:], 1 / 3), 1)
     delta = np.abs(fitted_linear.roots())
+    deltas.append(delta)
     print('delta= ', delta * 1000)
     err = 3 * forc * disp / 2 / width / (entr + delta) / 1000
 
-
-    plt.title(f'Compliance vs crack length {sample}')
-    left = -0.03
-    right = 0.15
-    graphpoints = np.linspace(left, right)
-    plt.scatter(entr[10:], np.power(comp[10:], 1 / 3))
-    plt.plot(graphpoints, fitted_linear(graphpoints))
-    plt.xlim(left, right)
-    plt.ylim(-0.03, 0.15)
-    plt.axhline(y=0, color='k')
-    plt.grid()
-    plt.show()
+    if False:
+        """Plotting"""
+        plt.title(f'Compliance vs crack length {sample}')
+        left = -0.03
+        right = 0.15
+        graphpoints = np.linspace(left, right)
+        plt.scatter(entr[10:], np.power(comp[10:], 1 / 3))
+        plt.plot(graphpoints, fitted_linear(graphpoints))
+        plt.xlim(left, right)
+        plt.ylim(-0.03, 0.15)
+        plt.axhline(y=0, color='k')
+        plt.grid()
+        plt.show()
 
     return err
 ns = []
@@ -177,13 +181,22 @@ def MCC_method(entries, force, displacement):
 
     err = 3 * (force ** 2) * np.power(compliance, 2 / 3) / 2 / width / A_1 / h / 1000
     return err
+
 def do_the_stuff():
-    for surf_treatment_dir in results.iterdir():
-        surf_treatment = surf_treatment_dir.stem
-        if surf_treatment != 'MMA_uniform':
-            for sample_dir in surf_treatment_dir.iterdir():
-                sample_name = sample_dir.stem
-                print(sample_name)
+    for surf_treatment_family_dir in results.iterdir():
+        surf_treatment_family = surf_treatment_family_dir.stem
+        # if True:
+        for sample_dir in surf_treatment_family_dir.iterdir():
+            sample_name = sample_dir.stem
+            print(sample_name)
+            surf_treatment = 'A'
+            if not sample_name == '2DS5':
+                if not sample_name[0:-1] == surf_treatment:
+
+
+                    surf_treatment = sample_name[0:-1]
+                    surf_treatment_lengths = []
+                    surf_treatment_err = []
                 entries, forces, displacements = read_cracklengths(sample_name, sample_dir)
                 entr = np.array(entries)
                 entr = entr + 0.035
@@ -191,10 +204,21 @@ def do_the_stuff():
                 err = MBT_method(entries, forces, displacements, sample=sample_name)
                 np.savetxt(sample_dir.joinpath(f'{sample_name}_err.txt'), err)
                 first_index = np.searchsorted(entries, 0.035)
+                surf_treatment_lengths.append(entries[first_index:])
+                surf_treatment_err.append(err[first_index:])
+
+
                 # Plot data
                 fig, ax = plt.subplots()
-                ax.scatter(entries[first_index:], err[first_index:])
+                ax.plot(entries[first_index:], err[first_index:], markersize=2, marker='o')
+                plt.grid()
+                plt.title(f'Energy release rate vs crack length {sample_name} \n Delta = {deltas[-1] * 1000} mm')
+                plt.xlabel('Crack length [m]')
+                plt.ylabel('Energy release rate [kJ/m^2]')
+                plt.ylim(0, 4)
+                plt.xlim(0, 0.15)
                 plt.savefig(sample_dir.joinpath(f'{sample_name}_err_graph.png'), dpi=300)
+                plt.savefig(plots.joinpath(f'{sample_name}_err_graph.png'), dpi=300)
                 plt.close()
 
 if __name__ == "__main__":

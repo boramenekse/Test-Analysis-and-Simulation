@@ -117,8 +117,8 @@ expansion_size = 5
 acceptable_max_difference = 5
 starting_hor_region1 = 0.08 # for checking if the correct horizontal starting position is found
 starting_hor_region2 = 0.11
-fourteencm_point_travel = [1890, 1717]
-fourteencm_dist = fourteencm_point_travel[0] - 423
+fourteencm_point_travel = [1924, 1563]
+fourteencm_dist = fourteencm_point_travel[0] - 354
 
 point_one_cm = fourteencm_dist/140 # [pixels]
 one_cm = point_one_cm * 10 # [pixels]
@@ -140,10 +140,10 @@ def remove_regions(image_no, image :np.array([])):
     image[:round(height*0/2048), :] = 0
 
     # region2
-    P0_0 = [500, 0]
-    P1_0 = [500, 1200]
-    P0_1 = [1200, 0]
-    P1_1 = [950, 1200]
+    P0_0 = [900, 0]
+    P1_0 = [900, 1300]
+    P0_1 = [2600, 0]
+    P1_1 = [1800, 1300]
 
     # formula: starting point + (ending point - starting point) * progress
     progress = image_no / total_files_no
@@ -219,7 +219,7 @@ def find_center(image, midpoint, file_no):
     midpoint: (int) the vertical position of the midpoint of the structure, which is on the line that the crack propagates through. Therefore, it actually calculates the vertical position of the ending point of the crack.
     """
     height_dcb = 22  # half height of the adhesive layer, added or substracted depending on whether the crack is on the top or bottom of the structure
-    lean = midpoint - np.nonzero(image[:, -1])[0][0] - height_dcb  # for the dcb not being straight
+    lean = midpoint - np.nonzero(image[:, -100])[0][0] - height_dcb  # for the dcb not being straight
     center = round(midpoint - (0.6 * (file_no/total_files_no) + 0.2) * lean)  # calculate the expected vertical position of the cracktip
     return center
 
