@@ -126,19 +126,19 @@ def MBT_method(entries, force, displacement, sample='undefined'):
     forc = np.array(force)
     disp = np.array(displacement)
     # Perform linear regression
-    fitted_linear = P.fit(entr[10:], np.power(comp[10:], 1 / 3), 1)
+    fitted_linear = P.fit(entr[5:], np.power(comp[5:], 1 / 3), 1)
     delta = np.abs(fitted_linear.roots())
     deltas.append(delta)
     print('delta= ', delta * 1000)
     err = 3 * forc * disp / 2 / width / (entr + delta) / 1000
 
-    if False:
+    if True:
         """Plotting"""
         plt.title(f'Compliance vs crack length {sample}')
         left = -0.03
         right = 0.15
         graphpoints = np.linspace(left, right)
-        plt.scatter(entr[10:], np.power(comp[10:], 1 / 3))
+        plt.scatter(entr[:], np.power(comp[:], 1 / 3))
         plt.plot(graphpoints, fitted_linear(graphpoints))
         plt.xlim(left, right)
         plt.ylim(-0.03, 0.15)
@@ -176,30 +176,45 @@ def MCC_method(entries, force, displacement):
     width = 0.025
     h = 0.01
     compliance = displacement / force
-    fitted_linear = P.fit(np.power(compliance, 1 / 3)[10:], (entries / h) [10:], 1)
+    fitted_linear = P.fit(np.power(compliance, 1 / 3)[:], (entries / h) [:], 1)
     A_1 = fitted_linear.coef[1]
 
     err = 3 * (force ** 2) * np.power(compliance, 2 / 3) / 2 / width / A_1 / h / 1000
     return err
 
 def do_the_stuff():
+    surf_treatment_name = 'A'
+    surf_treatment_lengths = []
+    surf_treatment_err = []
     for surf_treatment_family_dir in results.iterdir():
         surf_treatment_family = surf_treatment_family_dir.stem
         # if True:
         for sample_dir in surf_treatment_family_dir.iterdir():
             sample_name = sample_dir.stem
             print(sample_name)
-            surf_treatment = 'A'
+
             if not sample_name == '2DS5':
-                if not sample_name[0:-1] == surf_treatment:
+                if not sample_name[0:-1] == surf_treatment_name:
+                    for xval, yval in zip(surf_treatment_lengths, surf_treatment_err):
+                        plt.plot(xval, yval, markersize=2, marker='o')
 
+                    plt.title(f'Energy release rate vs crack length {surf_treatment_name}')
+                    # Plot data
+                    plt.grid()
+                    plt.title(f'Energy release rate vs crack length {surf_treatment_name}')
+                    plt.xlabel('Crack length [m]')
+                    plt.ylabel('Energy release rate [kJ/m^2]')
+                    plt.ylim(0, 4)
+                    plt.xlim(0, 0.15)
+                    plt.savefig(plots.joinpath(f'{surf_treatment_name}_err_graph.png'), dpi=300)
+                    plt.show()
 
-                    surf_treatment = sample_name[0:-1]
+                    surf_treatment_name = sample_name[0:-1]
                     surf_treatment_lengths = []
                     surf_treatment_err = []
                 entries, forces, displacements = read_cracklengths(sample_name, sample_dir)
                 entr = np.array(entries)
-                entr = entr + 0.035
+                entr = entr + 0.037
                 entries = entr.tolist()
                 err = MBT_method(entries, forces, displacements, sample=sample_name)
                 np.savetxt(sample_dir.joinpath(f'{sample_name}_err.txt'), err)
@@ -212,7 +227,7 @@ def do_the_stuff():
                 fig, ax = plt.subplots()
                 ax.plot(entries[first_index:], err[first_index:], markersize=2, marker='o')
                 plt.grid()
-                plt.title(f'Energy release rate vs crack length {sample_name} \n Delta = {deltas[-1] * 1000} mm')
+                plt.title(f'Energy release rate vs crack length {sample_name}')
                 plt.xlabel('Crack length [m]')
                 plt.ylabel('Energy release rate [kJ/m^2]')
                 plt.ylim(0, 4)
@@ -223,24 +238,31 @@ def do_the_stuff():
 
 if __name__ == "__main__":
     if False:
-        sample_name = 'C4'
+        sample_name = 'A12'
         surf_treatment = 'MMA_pattern'
         sample_dir = results.joinpath(surf_treatment, sample_name)
 
-        entries, forces, displacements = read_cracklengths(sample_name, sample_dir)
-        entr = np.array(entries)
-        entr = entr + 0.035
+        # entries, forces, displacements = read_cracklengths(sample_name, sample_dir)
+        entries, displacements, forces = np.loadtxt(root.joinpath('testing.txt'), unpack=True)
+        entr = entries /1000
+        displacements = displacements / 1000
+        entr = entr + 0.
         # entr = savgol_filter(entr, 5, 3)
         entries = entr.tolist()
         err = MBT_method(entries, forces, displacements)
         first_index = np.searchsorted(entries, 0.035)
-        # Plot data
-        plt.figure()
-        plt.scatter(entries[first_index:], err[first_index:])
 
-        plt.ylim(0, 3)
-        plt.show()
-        print(entries[-1])
+        # Plot data
+        fig, ax = plt.subplots()
+        ax.plot(entries[first_index:], err[first_index:], markersize=2, marker='o')
+        plt.grid()
+        plt.title(f'Energy release rate vs crack length {sample_name} \n Delta = {deltas[-1] * 1000} mm')
+        plt.xlabel('Crack length [m]')
+        plt.ylabel('Energy release rate [kJ/m^2]')
+        plt.ylim(0, 4)
+        plt.xlim(0, 0.15)
+        plt.savefig(plots.joinpath(f'{sample_name}_err_graph.png'), dpi=300)
+        plt.close()
     else:
         do_the_stuff()
 
