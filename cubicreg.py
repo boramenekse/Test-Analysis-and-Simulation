@@ -186,6 +186,7 @@ def do_the_stuff():
     surf_treatment_name = 'A'
     surf_treatment_lengths = []
     surf_treatment_err = []
+    sample_names = []
     for surf_treatment_family_dir in results.iterdir():
         surf_treatment_family = surf_treatment_family_dir.stem
         # if True:
@@ -195,32 +196,35 @@ def do_the_stuff():
 
             if not sample_name == '2DS5':
                 if not sample_name[0:-1] == surf_treatment_name:
-                    for xval, yval in zip(surf_treatment_lengths, surf_treatment_err):
-                        plt.plot(xval, yval, markersize=2, marker='o')
+                    for xval, yval, name in zip(surf_treatment_lengths, surf_treatment_err, sample_names):
+                        plt.plot(xval, yval, markersize=2, marker='o', label=name)
 
-                    plt.title(f'Energy release rate vs crack length {surf_treatment_name}')
+                    #plt.title(f'Energy release rate vs crack length {surf_treatment_name}')
                     # Plot data
                     plt.grid()
-                    plt.title(f'Energy release rate vs crack length {surf_treatment_name}')
+                    #plt.title(f'Energy release rate vs crack length {surf_treatment_name}')
                     plt.xlabel('Crack length [m]')
-                    plt.ylabel('Energy release rate [kJ/m^2]')
+                    plt.ylabel('Energy release rate [$kJ/m^2$]')
                     plt.ylim(0, 4.1)
                     plt.xlim(0, 0.15)
+                    plt.legend()
                     plt.savefig(plots.joinpath(f'{surf_treatment_name}_err_graph.png'), dpi=300)
                     plt.show()
+                    plt.close()
 
                     surf_treatment_name = sample_name[0:-1]
                     surf_treatment_lengths = []
                     surf_treatment_err = []
                 entries, forces, displacements = read_cracklengths(sample_name, sample_dir)
                 entr = np.array(entries)
-                entr = entr + 0.037
+                entr = entr + 0.03
                 entries = entr.tolist()
                 err = MBT_method(entries, forces, displacements, sample=sample_name)
                 np.savetxt(sample_dir.joinpath(f'{sample_name}_err.txt'), err)
                 first_index = np.searchsorted(entries, 0.035)
                 surf_treatment_lengths.append(entries[first_index:])
                 surf_treatment_err.append(err[first_index:])
+                sample_names.append(sample_name)
 
 
                 # Plot data
@@ -229,7 +233,7 @@ def do_the_stuff():
                 plt.grid()
                 #plt.title(f'Energy release rate vs crack length {sample_name}')
                 plt.xlabel('Crack length [m]')
-                plt.ylabel('Energy release rate [kJ/m^2]')
+                plt.ylabel('Energy release rate [$kJ/m^2$]')
                 if surf_treatment_name == 'PP':
                     plt.ylim(0, 5)
                 else:
